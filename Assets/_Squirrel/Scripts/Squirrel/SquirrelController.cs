@@ -30,6 +30,8 @@ namespace Squirrel
         public int Facing { get; private set; } = 1;
         public bool IsGliding { get; private set; }
         public SquirrelSettings Settings => settings;
+        /// <summary>Белка стоит на месте (лечение): бег отключён, прыжок работает и прерывает лечение.</summary>
+        public bool Rooted { get; set; }
 
         void Awake()
         {
@@ -92,7 +94,7 @@ namespace Squirrel
             }
             else if (inputLockTimer <= 0f)
             {
-                float target = move.x * s.maxRunSpeed;
+                float target = Rooted ? 0f : move.x * s.maxRunSpeed;
                 bool onGround = State == SquirrelState.Grounded;
                 float accel;
                 if (Mathf.Approximately(move.x, 0f))
@@ -166,7 +168,7 @@ namespace Squirrel
             if (c.below && velocity.y < 0f) velocity.y = 0f;
             if ((c.left && velocity.x < 0f) || (c.right && velocity.x > 0f)) velocity.x = 0f;
 
-            if (State != SquirrelState.OnWall && Mathf.Abs(move.x) > 0f && inputLockTimer <= 0f)
+            if (State != SquirrelState.OnWall && Mathf.Abs(move.x) > 0f && inputLockTimer <= 0f && !Rooted)
                 Facing = move.x > 0 ? 1 : -1;
             else if (State == SquirrelState.OnWall)
                 Facing = wallDir;
@@ -224,6 +226,35 @@ namespace Squirrel
                 visualBaseScale.z);
         }
 
+        /// <summary>Отбрасывание от удара: задаёт скорость и на время отбирает управление по X.</summary>
+        public void Knockback(Vector2 newVelocity, float lockTime)
+        {
+            velocity = newVelocity;
+            inputLockTimer = Mathf.Max(inputLockTimer, lockTime);
+            isJumping = false;
+            jumpBufferTimer = 0f;
+            coyoteTimer = 0f;
+            wallCoyoteTimer = 0f;
+            State = SquirrelState.Airborne;
+        }
+
+        /// <summary>Отскок вверх после удара хвостом вниз по врагу. Высота не зависит от кнопки прыжка.</summary>
+        public void Pogo(float upVelocity)
+        {
+            velocity.y = upVelocity;
+            isJumping = false;
+            coyoteTimer = 0f;
+            State = SquirrelState.Airborne;
+            Squash(1f - settings.squashAmount * 0.6f, 1f + settings.squashAmount * 0.6f);
+        }
+
+        /// <summary>Отдача по X после удара вбок.</summary>
+        public void Recoil(float vx, float lockTime)
+        {
+            velocity.x = vx;
+            inputLockTimer = Mathf.Max(inputLockTimer, lockTime);
+        }
+
         /// <summary>Перенос белки (возврат в гнездо и т.п.).</summary>
         public void Teleport(Vector2 position)
         {
@@ -231,6 +262,8 @@ namespace Squirrel
             velocity = Vector2.zero;
             State = SquirrelState.Airborne;
             isJumping = false;
+            inputLockTimer = 0f;
+            Rooted = false;
         }
     }
 }

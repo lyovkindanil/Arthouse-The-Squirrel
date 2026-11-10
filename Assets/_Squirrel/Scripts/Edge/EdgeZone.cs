@@ -23,7 +23,10 @@ namespace Squirrel.Edge
         public EdgeStage Stage { get; private set; } = EdgeStage.Hold;
         /// <summary>Номер текущей фазы с нуля. Равен phaseCount во время финала.</summary>
         public int Phase { get; private set; }
-        public float Radius { get; private set; }
+        /// <summary>Текущий радиус: радиус фазы плюс то, на что Край оттолкнули воспоминания.</summary>
+        public float Radius => Mathf.Max(0f, baseRadius + bonus);
+        /// <summary>Сколько всего Край оттолкнули (ед) — копится до конца локации.</summary>
+        public float PushedBack => bonusTarget;
         /// <summary>Сколько секунд осталось до конца текущей стадии.</summary>
         public float StageTimeLeft { get; private set; }
         public float StageDuration { get; private set; }
@@ -35,8 +38,13 @@ namespace Squirrel.Edge
         public event Action<int> PhaseStarted;   // пауза новой фазы началась
         public event Action<int> ShrinkStarted;  // Край пополз
         public event Action Stabilized;          // Сердце восстановлено
+        public event Action<float> PushedBackBy; // воспоминание оттолкнуло Край
 
         float shrinkFrom, shrinkTo;
+        float baseRadius;
+        float bonus, bonusTarget;
+        [Tooltip("Как быстро Край отступает после воспоминания, ед/с")]
+        [SerializeField] float pushBackSpeed = 3f;
 
         void Awake()
         {
@@ -51,18 +59,19 @@ namespace Squirrel.Edge
         public void ResetZone()
         {
             pausers.Clear();
+            bonus = bonusTarget = 0f;
             EnterHold(0);
         }
 
         void EnterHold(int phase)
         {
             Phase = phase;
-            Radius = settings.RadiusAt(phase);
+            baseRadius = settings.RadiusAt(phase);
             if (phase >= settings.phaseCount)
             {
                 // Финал: стоим, затем схлопываемся.
                 Stage = settings.collapseAfterLastPhase ? EdgeStage.Collapse : EdgeStage.Hold;
-                shrinkFrom = shrinkTo = Radius;
+                shrinkFrom = shrinkTo = baseRadius;
                 SetTimer(settings.collapseAfterLastPhase ? settings.collapseHoldTime : float.PositiveInfinity);
             }
             else
@@ -76,7 +85,7 @@ namespace Squirrel.Edge
         void EnterShrink()
         {
             Stage = EdgeStage.Shrink;
-            shrinkFrom = Radius;
+            shrinkFrom = baseRadius;
             shrinkTo = settings.RadiusAt(Phase + 1);
             SetTimer(settings.ShrinkTime(Phase));
             ShrinkStarted?.Invoke(Phase);
@@ -90,7 +99,9 @@ namespace Squirrel.Edge
 
         void Update()
         {
-            if (Stage == EdgeStage.Stabilized || IsPaused) return;
+            if (Stage == EdgeStage.Stabilized) return;
+            bonus = Mathf.MoveTowards(bonus, bonusTarget, pushBackSpeed * Time.deltaTime);
+            if (IsPaused) return;
             if (float.IsPositiveInfinity(StageTimeLeft)) return;
 
             StageTimeLeft -= Time.deltaTime;
@@ -102,16 +113,18 @@ namespace Squirrel.Edge
                     break;
 
                 case EdgeStage.Shrink:
-                    Radius = Mathf.Lerp(shrinkFrom, shrinkTo, Ease(1f - StageTimeLeft / StageDuration));
+                    baseRadius = Mathf.Lerp(shrinkFrom, shrinkTo, Ease(1f - StageTimeLeft / StageDuration));
                     if (StageTimeLeft <= 0f) EnterHold(Phase + 1);
                     break;
 
                 case EdgeStage.Collapse:
                     if (shrinkFrom == shrinkTo)
                     {
-                        // Пауза перед схлопыванием закончилась — ползём к нулю.
+                        // Пауза перед схлопыванием закончилась — ползём к нулю. Отталкивание больше не спасает.
                         if (StageTimeLeft <= 0f)
                         {
+                            shrinkFrom = baseRadius = Radius;
+                            bonus = bonusTarget = 0f;
                             shrinkTo = 0f;
                             SetTimer(settings.collapseTime);
                             ShrinkStarted?.Invoke(Phase);
@@ -119,8 +132,8 @@ namespace Squirrel.Edge
                     }
                     else
                     {
-                        Radius = Mathf.Lerp(shrinkFrom, shrinkTo, Ease(1f - StageTimeLeft / StageDuration));
-                        if (StageTimeLeft <= 0f) { Radius = 0f; StageTimeLeft = 0f; }
+                        baseRadius = Mathf.Lerp(shrinkFrom, shrinkTo, Ease(1f - StageTimeLeft / StageDuration));
+                        if (StageTimeLeft <= 0f) { baseRadius = 0f; StageTimeLeft = 0f; }
                     }
                     break;
             }
@@ -148,6 +161,20 @@ namespace Squirrel.Edge
             if (Stage == EdgeStage.Stabilized) return;
             int target = Stage == EdgeStage.Shrink ? Phase : Phase - 1;
             EnterHold(Mathf.Max(0, target));
+        }
+
+        /// <summary>
+        /// Воспоминание отталкивает Край на amount единиц (плавно, со скоростью pushBackSpeed).
+        /// Отталкивание копится до конца локации. Во время схлопывания вместо этого откатывает таймер на amount секунд.
+        /// </summary>
+        public void PushBack(float amount)
+        {
+            if (Stage == EdgeStage.Stabilized || amount <= 0f) return;
+            if (Stage == EdgeStage.Collapse)
+                StageTimeLeft = Mathf.Min(StageDuration, StageTimeLeft + amount);
+            else
+                bonusTarget += amount;
+            PushedBackBy?.Invoke(amount);
         }
 
         /// <summary>Сердце восстановлено: Край замирает там, где был.</summary>

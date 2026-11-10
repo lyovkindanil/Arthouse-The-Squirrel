@@ -46,6 +46,11 @@ namespace Squirrel
             }
         }
 
+        public Vector2 WorldCenter => Center;
+        public Vector2 WorldSize => Size;
+        /// <summary>Тело белки в мировых координатах — для попаданий врагов.</summary>
+        public Rect WorldRect => new Rect(Center - Size * 0.5f, Size);
+
         /// <summary>Сколько можно пройти из origin в направлении dir, не врезавшись (не больше distance).</summary>
         float FreeDistance(Vector2 origin, Vector2 dir, float distance, out bool blocked)
         {

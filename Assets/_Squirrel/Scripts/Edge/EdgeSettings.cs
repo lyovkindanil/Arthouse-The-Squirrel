@@ -34,12 +34,10 @@ namespace Squirrel.Edge
         public float collapseHoldTime = 8f;
         public float collapseTime = 10f;
 
-        [Header("Урон за Краем")]
-        [Tooltip("Ячейки здоровья («зёрна»)")]
-        public float maxHealth = 5f;
+        [Header("Урон за Краем (число зёрен — в CombatSettings)")]
         [Tooltip("Сколько зёрен в секунду тает за Краем")]
         public float drainPerSecond = 1.5f;
-        [Tooltip("Восстановление внутри зоны, зёрен в секунду (0 — не восстанавливается)")]
+        [Tooltip("Восстановление подтаявшего зерна внутри зоны, зёрен в секунду (целые зёрна так не вернуть)")]
         public float regenPerSecond = 0.5f;
         [Tooltip("Через сколько секунд внутри зоны начинается восстановление")]
         public float regenDelay = 2f;

@@ -4,15 +4,18 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using Squirrel;
+using Squirrel.Combat;
 using Squirrel.Edge;
+using Squirrel.Enemies;
 using Squirrel.World;
 
 namespace SquirrelEditor
 {
     /// <summary>
-    /// Меню Squirrel → «Собрать серую комнату». Создаёт сцену Assets/_Squirrel/Scenes/Greybox.unity
-    /// со всем нужным: белка, Край, Сердце, два гнезда, платформы, камера, HUD.
-    /// Повторный запуск пересоздаёт сцену, но не трогает настройки (ScriptableObject'ы).
+    /// Меню Squirrel → «Собрать серую комнату» и «Собрать арену боя».
+    /// Greybox.unity — комната с Краем, Сердцем, гнёздами и воспоминаниями.
+    /// Arena.unity — арена с врагами всех трёх типов и манекеном для отработки ударов.
+    /// Повторный запуск пересоздаёт сцены, но не трогает настройки (ScriptableObject'ы).
     /// </summary>
     public static class GreyboxBuilder
     {
@@ -20,29 +23,63 @@ namespace SquirrelEditor
         const string Generated = Root + "/Generated";
         const string SettingsDir = Root + "/Settings";
         const string ScenePath = Root + "/Scenes/Greybox.unity";
+        const string ArenaPath = Root + "/Scenes/Arena.unity";
 
         static readonly Color Ground = new Color(0.36f, 0.40f, 0.38f);
         static readonly Color Platform = new Color(0.50f, 0.55f, 0.50f);
         static readonly Color Bark = new Color(0.42f, 0.34f, 0.30f);
         static readonly Color Background = new Color(0.14f, 0.17f, 0.20f);
 
+        static readonly Color Moss = new Color(0.35f, 0.62f, 0.35f);
+        static readonly Color MothColor = new Color(0.78f, 0.74f, 0.95f);
+        static readonly Color SpitterColor = new Color(0.72f, 0.82f, 0.32f);
+        static readonly Color MemoryColor = new Color(0.65f, 0.92f, 1f);
+
         static Sprite white;
         static Material unlit;
+        static SquirrelSettings squirrelSettings;
+        static EdgeSettings edgeSettings;
+        static CombatSettings combatSettings;
 
-        [MenuItem("Squirrel/Собрать серую комнату")]
-        public static void Build()
+        [MenuItem("Squirrel/Собрать всё (комната + арена)")]
+        public static void BuildAll()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            BuildGreyboxScene();
+            BuildArenaScene();
+            EditorSceneManager.OpenScene(ScenePath);
+        }
 
+        static void Prepare()
+        {
             UrpSetup.Run();
             EnsureFolder(Generated);
             EnsureFolder(SettingsDir);
             EnsureFolder(Root + "/Scenes");
             white = MakeWhiteSprite();
             unlit = MakeUnlitMaterial();
-            var squirrelSettings = LoadOrCreate<SquirrelSettings>(SettingsDir + "/SquirrelSettings.asset");
-            var edgeSettings = LoadOrCreate<EdgeSettings>(SettingsDir + "/EdgeSettings.asset");
+            squirrelSettings = LoadOrCreate<SquirrelSettings>(SettingsDir + "/SquirrelSettings.asset");
+            edgeSettings = LoadOrCreate<EdgeSettings>(SettingsDir + "/EdgeSettings.asset");
+            combatSettings = LoadOrCreate<CombatSettings>(SettingsDir + "/CombatSettings.asset");
+        }
 
+        [MenuItem("Squirrel/Собрать серую комнату")]
+        public static void Build()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            BuildGreyboxScene();
+        }
+
+        [MenuItem("Squirrel/Собрать арену боя")]
+        public static void BuildArena()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            BuildArenaScene();
+        }
+
+        static void BuildGreyboxScene()
+        {
+            Prepare();
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             // --- Комната ---
@@ -94,9 +131,96 @@ namespace SquirrelEditor
             Set(heart, "zone", zone);
             Set(heart, "visual", heartVisual.transform);
 
-            // --- Белка ---
+            // --- Белка, гнёзда, воспоминания ---
+            var rig = BuildSquirrel(new Vector3(-28, 0.05f), zone);
+            Set(heart, "squirrel", rig.root);
+
+            MakeNest("Nest 1 (start)", new Vector3(-28, 0), rig.root, zone);
+            MakeNest("Nest 2 (top of trunk)", new Vector3(6, 18), rig.root, zone);
+
+            // Воспоминания — в стороне от основного пути, награда за исследование.
+            MakeMemory("Memory 1 (above Platform A)", new Vector3(-22, 3.6f), rig.root, zone);
+            MakeMemory("Memory 2 (right shelf)", new Vector3(29.5f, 17f), rig.root, zone);
+            MakeMemory("Memory 3 (corner overhang)", new Vector3(-13.5f, 9.5f), rig.root, zone);
+
+            BuildCameraAndHud(new Vector3(-26, 2, -10), rig, zone);
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AddSceneToBuild(ScenePath, true);
+            Selection.activeObject = squirrelSettings;
+            Debug.Log("Серая комната собрана: " + ScenePath + ". Жми Play. Числа белки — в Settings/SquirrelSettings, Края — в Settings/EdgeSettings, боя — в Settings/CombatSettings.");
+        }
+
+        static void BuildArenaScene()
+        {
+            Prepare();
+            var arenaEdge = LoadOrCreate<EdgeSettings>(SettingsDir + "/EdgeSettings_Arena.asset", e =>
+            {
+                // На арене Край есть, но далеко и медленно: тут учимся драться.
+                e.startRadius = 44f;
+                e.finalRadius = 14f;
+                e.phaseCount = 3;
+                e.firstHoldTime = 180f;
+                e.firstShrinkTime = 15f;
+            });
+
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            // --- Арена 64 × 24 ---
+            var level = new GameObject("Level").transform;
+            Block(level, "Floor", 0, -1, 68, 2, Ground);
+            Block(level, "Ceiling", 0, 23, 68, 2, Ground);
+            Block(level, "Wall Left", -33, 11, 2, 24, Bark);
+            Block(level, "Wall Right", 33, 11, 2, 24, Bark);
+            Block(level, "Platform P1 (crawler)", -2, 4, 10, 1, Platform);
+            Block(level, "Platform P2", 10, 8, 6, 1, Platform);
+            Block(level, "Platform P3 (spitter)", 20, 4, 6, 1, Platform);
+            Block(level, "Platform P4 (memory)", -14, 9, 6, 1, Platform);
+            Block(level, "Step", -8, 0.5f, 2, 1, Bark);
+            Block(level, "Log (keeps crawler away from nest)", -17, 0.5f, 1, 1, Bark);
+
+            var zoneGo = new GameObject("Edge (Край)");
+            zoneGo.transform.position = new Vector3(0, 10);
+            var zone = zoneGo.AddComponent<EdgeZone>();
+            Set(zone, "settings", arenaEdge);
+            Set(zoneGo.AddComponent<EdgeVisual>(), "material", unlit);
+
+            var rig = BuildSquirrel(new Vector3(-28, 0.05f), zone);
+            MakeNest("Nest (arena start)", new Vector3(-28, 0), rig.root, zone);
+
+            // --- Враги ---
+            MakeDummy("Training Dummy", new Vector3(-20, 0));
+            MakeCrawler("Crawler A (floor)", new Vector3(-12, 0), -1);
+            MakeCrawler("Crawler B (platform P1)", new Vector3(-2, 4.5f), 1);
+            MakeCrawler("Crawler C (floor right)", new Vector3(14, 0), 1);
+            MakeMoth("Moth (above P2)", new Vector3(6, 13));
+            MakeSpitter("Spitter (on P3)", new Vector3(22, 4.5f));
+
+            MakeMemory("Memory A (on P4)", new Vector3(-14, 10.4f), rig.root, zone);
+            MakeMemory("Memory B (far right)", new Vector3(30, 1.2f), rig.root, zone);
+
+            BuildCameraAndHud(new Vector3(-26, 2, -10), rig, zone);
+
+            EditorSceneManager.SaveScene(scene, ArenaPath);
+            AddSceneToBuild(ArenaPath, false);
+            Selection.activeObject = combatSettings;
+            Debug.Log("Арена собрана: " + ArenaPath + ". Числа боя — в Settings/CombatSettings.");
+        }
+
+        struct SquirrelRig
+        {
+            public Transform root;
+            public SquirrelController controller;
+            public EdgeExposure exposure;
+            public SquirrelHealth health;
+            public AcornThrower thrower;
+            public Respawner respawner;
+        }
+
+        static SquirrelRig BuildSquirrel(Vector3 position, EdgeZone zone)
+        {
             var sq = new GameObject("Squirrel");
-            sq.transform.position = new Vector3(-28, 0.05f);
+            sq.transform.position = position;
             var box = sq.AddComponent<BoxCollider2D>();
             box.size = new Vector2(0.8f, 0.7f);
             box.offset = new Vector2(0, 0.35f);
@@ -115,35 +239,144 @@ namespace SquirrelEditor
             Set(controller, "settings", squirrelSettings);
             Set(controller, "visual", body);
 
+            var health = sq.AddComponent<SquirrelHealth>();
+            Set(health, "settings", combatSettings);
+            Set(health, "visual", body);
+
+            var attack = sq.AddComponent<TailAttack>();
+            var slash = MakeSprite(sq.transform, "Tail Slash", Vector2.zero, Vector2.one, new Color(1f, 0.95f, 0.7f, 0.45f), 113);
+            Set(attack, "slash", slash);
+
+            var thrower = sq.AddComponent<AcornThrower>();
+            Set(thrower, "sprite", white);
+            Set(thrower, "material", unlit);
+
             var exposure = sq.AddComponent<EdgeExposure>();
             Set(exposure, "zone", zone);
-            Set(exposure, "squirrel", controller);
-            Set(heart, "squirrel", sq.transform);
+            Set(exposure, "health", health);
 
-            // --- Гнёзда ---
-            MakeNest("Nest 1 (start)", new Vector3(-28, 0), sq.transform, zone);
-            MakeNest("Nest 2 (top of trunk)", new Vector3(6, 18), sq.transform, zone);
+            var respawner = sq.AddComponent<Respawner>();
+            Set(respawner, "zone", zone);
 
-            // --- Камера и HUD ---
+            return new SquirrelRig
+            {
+                root = sq.transform, controller = controller, exposure = exposure,
+                health = health, thrower = thrower, respawner = respawner
+            };
+        }
+
+        static void BuildCameraAndHud(Vector3 cameraPos, SquirrelRig rig, EdgeZone zone)
+        {
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
-            camGo.transform.position = new Vector3(-26, 2, -10);
+            camGo.transform.position = cameraPos;
             var cam = camGo.AddComponent<Camera>();
             cam.orthographic = true;
             cam.orthographicSize = 8f;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Background;
             var follow = camGo.AddComponent<CameraFollow>();
-            Set(follow, "target", controller);
+            Set(follow, "target", rig.controller);
 
             var hud = new GameObject("Prototype HUD").AddComponent<PrototypeHUD>();
             Set(hud, "zone", zone);
-            Set(hud, "exposure", exposure);
-            Set(hud, "squirrel", controller);
+            Set(hud, "exposure", rig.exposure);
+            Set(hud, "squirrel", rig.controller);
+            Set(hud, "health", rig.health);
+            Set(hud, "thrower", rig.thrower);
+            Set(hud, "respawner", rig.respawner);
+        }
 
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            AddSceneToBuild(ScenePath);
-            Selection.activeObject = squirrelSettings;
-            Debug.Log("Серая комната собрана: " + ScenePath + ". Жми Play. Числа белки — в Settings/SquirrelSettings, Края — в Settings/EdgeSettings.");
+        static void MakeMemory(string name, Vector3 pos, Transform squirrel, EdgeZone zone)
+        {
+            var go = new GameObject(name);
+            go.transform.position = pos;
+            var visual = MakeSprite(go.transform, "Visual", Vector2.zero, new Vector2(0.45f, 0.45f), MemoryColor, 30);
+            visual.transform.localRotation = Quaternion.Euler(0, 0, 45);
+            var m = go.AddComponent<Memory>();
+            Set(m, "squirrel", squirrel);
+            Set(m, "zone", zone);
+            Set(m, "visual", visual.transform);
+        }
+
+        static Transform EnemyRoot(string name, Vector3 pos)
+        {
+            var go = new GameObject(name);
+            go.transform.position = pos;
+            return go.transform;
+        }
+
+        static void SetVector(Object target, string field, Vector2 value)
+        {
+            var so = new SerializedObject(target);
+            so.FindProperty(field).vector2Value = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void SetInt(Object target, string field, int value)
+        {
+            var so = new SerializedObject(target);
+            so.FindProperty(field).intValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void MakeCrawler(string name, Vector3 pos, int dir)
+        {
+            var root = EnemyRoot(name, pos);
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(root, false);
+            MakeSprite(visual, "Body", new Vector2(0, 0.4f), new Vector2(1.2f, 0.8f), Moss, 60);
+            MakeSprite(visual, "Eye", new Vector2(0.4f, 0.55f), new Vector2(0.15f, 0.15f), new Color(0.95f, 0.9f, 0.3f), 61);
+            var c = root.gameObject.AddComponent<Crawler>();
+            SetVector(c, "hitSize", new Vector2(1.2f, 0.8f));
+            SetVector(c, "hitOffset", new Vector2(0, 0.4f));
+            SetInt(c, "startDirection", dir);
+            Set(c, "visual", visual);
+        }
+
+        static void MakeMoth(string name, Vector3 pos)
+        {
+            var root = EnemyRoot(name, pos);
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(root, false);
+            MakeSprite(visual, "Body", Vector2.zero, new Vector2(0.5f, 0.6f), MothColor, 60);
+            var wl = MakeSprite(visual, "Wing L", new Vector2(-0.4f, 0.05f), new Vector2(0.5f, 0.4f), MothColor * 0.85f, 59);
+            wl.transform.localRotation = Quaternion.Euler(0, 0, 20);
+            var wr = MakeSprite(visual, "Wing R", new Vector2(0.4f, 0.05f), new Vector2(0.5f, 0.4f), MothColor * 0.85f, 59);
+            wr.transform.localRotation = Quaternion.Euler(0, 0, -20);
+            var m = root.gameObject.AddComponent<Moth>();
+            SetVector(m, "hitSize", new Vector2(0.9f, 0.6f));
+            SetVector(m, "hitOffset", Vector2.zero);
+            SetInt(m, "maxHp", 2);
+            Set(m, "visual", visual);
+        }
+
+        static void MakeSpitter(string name, Vector3 pos)
+        {
+            var root = EnemyRoot(name, pos);
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(root, false);
+            MakeSprite(visual, "Stem", new Vector2(0, 0.35f), new Vector2(0.45f, 0.7f), new Color(0.9f, 0.88f, 0.75f), 60);
+            MakeSprite(visual, "Cap", new Vector2(0, 0.85f), new Vector2(1.2f, 0.5f), SpitterColor, 61);
+            var sp = root.gameObject.AddComponent<Spitter>();
+            SetVector(sp, "hitSize", new Vector2(1.1f, 1.1f));
+            SetVector(sp, "hitOffset", new Vector2(0, 0.55f));
+            Set(sp, "visual", visual);
+            Set(sp, "shotSprite", white);
+            Set(sp, "shotMaterial", unlit);
+        }
+
+        static void MakeDummy(string name, Vector3 pos)
+        {
+            var root = EnemyRoot(name, pos);
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(root, false);
+            MakeSprite(visual, "Stump", new Vector2(0, 0.8f), new Vector2(1f, 1.6f), new Color(0.6f, 0.45f, 0.32f), 60);
+            var d = root.gameObject.AddComponent<TrainingDummy>();
+            SetVector(d, "hitSize", new Vector2(1f, 1.6f));
+            SetVector(d, "hitOffset", new Vector2(0, 0.8f));
+            SetInt(d, "maxHp", 99);
+            SetInt(d, "contactDamage", 0);
+            Set(d, "visual", visual);
         }
 
         static void MakeNest(string name, Vector3 pos, Transform squirrel, EdgeZone zone)
@@ -238,11 +471,12 @@ namespace SquirrelEditor
             return mat;
         }
 
-        static T LoadOrCreate<T>(string path) where T : ScriptableObject
+        static T LoadOrCreate<T>(string path, System.Action<T> init = null) where T : ScriptableObject
         {
             var a = AssetDatabase.LoadAssetAtPath<T>(path);
             if (a != null) return a;
             a = ScriptableObject.CreateInstance<T>();
+            init?.Invoke(a);
             AssetDatabase.CreateAsset(a, path);
             AssetDatabase.SaveAssets();
             return a;
@@ -256,11 +490,12 @@ namespace SquirrelEditor
             AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
         }
 
-        static void AddSceneToBuild(string path)
+        static void AddSceneToBuild(string path, bool first)
         {
             var scenes = EditorBuildSettings.scenes.ToList();
             if (scenes.Any(s => s.path == path)) return;
-            scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+            if (first) scenes.Insert(0, new EditorBuildSettingsScene(path, true));
+            else scenes.Add(new EditorBuildSettingsScene(path, true));
             EditorBuildSettings.scenes = scenes.ToArray();
         }
     }

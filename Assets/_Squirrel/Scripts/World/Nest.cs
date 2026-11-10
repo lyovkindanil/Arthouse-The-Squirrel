@@ -1,10 +1,12 @@
 using UnityEngine;
+using Squirrel.Combat;
 using Squirrel.Edge;
 
 namespace Squirrel.World
 {
     /// <summary>
     /// Гнездо — чекпоинт. Пока белка в гнезде, Край стоит. Последнее посещённое гнездо — точка возврата.
+    /// Отдых в гнезде возвращает все зёрна и жёлуди.
     /// Проверка по расстоянию, без физики, чтобы не зависеть от Rigidbody.
     /// </summary>
     public class Nest : MonoBehaviour
@@ -45,7 +47,14 @@ namespace Squirrel.World
             {
                 Occupied = inside;
                 if (zone != null) zone.SetPaused(this, inside);
-                if (inside) LastVisited = this;
+                if (inside)
+                {
+                    LastVisited = this;
+                    var health = squirrel.GetComponent<SquirrelHealth>();
+                    if (health != null && !health.IsDead) health.Restore();
+                    var thrower = squirrel.GetComponent<AcornThrower>();
+                    if (thrower != null) thrower.Refill();
+                }
             }
             if (marker != null)
                 marker.color = LastVisited == this ? activeColor : idleColor;
