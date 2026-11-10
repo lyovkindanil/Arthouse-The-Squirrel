@@ -22,6 +22,8 @@
 3. Чтобы пересобрать сцену с нуля: меню **Squirrel → Собрать серую комнату** (настройки-ассеты не трогаются).
    Из консоли: `Unity.exe -batchmode -quit -projectPath . -executeMethod SquirrelEditor.GreyboxBuilder.Build`.
 
+**Автотесты** (Play Mode, 7 штук: бег, прыжок, ствол, фазы Края, гнездо, провал в сон, Сердце): Window → General → Test Runner → PlayMode → Run All, или `Unity.exe -batchmode -projectPath . -runTests -testPlatform PlayMode -testResults results.xml`.
+
 ## Управление
 
 | Действие | Клавиатура | Геймпад |

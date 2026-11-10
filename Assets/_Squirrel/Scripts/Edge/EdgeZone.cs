@@ -162,7 +162,7 @@ namespace Squirrel.Edge
         public void DebugSkipStage()
         {
             if (Stage == EdgeStage.Stabilized) return;
-            StageTimeLeft = Mathf.Min(StageTimeLeft, 0.01f);
+            StageTimeLeft = Mathf.Min(StageTimeLeft, 0f); // ровно 0: сработает в следующем кадре при любом FPS
         }
 
         void OnDrawGizmos()

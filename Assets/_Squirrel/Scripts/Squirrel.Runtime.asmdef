@@ -1,0 +1,6 @@
+{
+    "name": "Squirrel.Runtime",
+    "rootNamespace": "Squirrel",
+    "references": ["Unity.InputSystem"],
+    "autoReferenced": true
+}

@@ -38,8 +38,31 @@ namespace Squirrel
         void OnDisable() { move.Disable(); jump.Disable(); }
         void OnDestroy() { move.Dispose(); jump.Dispose(); }
 
+        // Подмена ввода для автотестов и будущих скриптовых сцен (катсцены, туториал).
+        bool overridden;
+        Vector2 overrideMove;
+        bool overrideJump;
+
+        /// <summary>Управлять белкой из кода вместо клавиатуры/геймпада.</summary>
+        public void SetOverride(Vector2 moveValue, bool jumpHeld)
+        {
+            overridden = true;
+            overrideMove = moveValue;
+            overrideJump = jumpHeld;
+        }
+
+        public void ClearOverride() => overridden = false;
+
         void Update()
         {
+            if (overridden)
+            {
+                Move = overrideMove;
+                JumpPressedThisFrame = overrideJump && !JumpHeld;
+                JumpHeld = overrideJump;
+                return;
+            }
+
             Vector2 m = move.ReadValue<Vector2>();
             // Мёртвая зона и «цифровой» X: для платформера стик выше 0.5 = полный бег.
             m.x = Mathf.Abs(m.x) < 0.2f ? 0f : Mathf.Sign(m.x) * Mathf.Clamp01(Mathf.Abs(m.x) * 2f);

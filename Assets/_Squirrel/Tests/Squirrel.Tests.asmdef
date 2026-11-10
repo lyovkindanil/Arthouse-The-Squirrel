@@ -1,0 +1,9 @@
+{
+    "name": "Squirrel.Tests",
+    "rootNamespace": "Squirrel.Tests",
+    "references": ["Squirrel.Runtime", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+    "overrideReferences": true,
+    "precompiledReferences": ["nunit.framework.dll"],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
