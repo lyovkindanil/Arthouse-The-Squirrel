@@ -220,10 +220,18 @@ namespace SquirrelEditor
         static Material MakeUnlitMaterial()
         {
             string path = Generated + "/GreyboxUnlit.mat";
-            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (mat != null) return mat;
-            var shader = Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default");
+            // URP-шейдер работает только при назначенном URP-ассете, иначе спрайты будут розовыми.
+            Shader shader = null;
+            if (UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline != null)
+                shader = Shader.Find("Universal Render Pipeline/2D/Sprite-Unlit-Default");
             if (shader == null) shader = Shader.Find("Sprites/Default");
+
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat != null)
+            {
+                if (mat.shader != shader) { mat.shader = shader; EditorUtility.SetDirty(mat); AssetDatabase.SaveAssets(); }
+                return mat;
+            }
             mat = new Material(shader);
             AssetDatabase.CreateAsset(mat, path);
             return mat;

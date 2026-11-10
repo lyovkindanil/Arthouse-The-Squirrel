@@ -17,10 +17,10 @@ namespace Squirrel.World
         {
             if (squirrel == null)
             {
-                var c = FindFirstObjectByType<SquirrelController>();
+                var c = FindAnyObjectByType<SquirrelController>();
                 if (c != null) squirrel = c.transform;
             }
-            if (zone == null) zone = FindFirstObjectByType<EdgeZone>();
+            if (zone == null) zone = FindAnyObjectByType<EdgeZone>();
         }
 
         void Update()

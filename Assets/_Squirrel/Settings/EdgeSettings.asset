@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 07c4f4388e4cb734f994512ad453431b, type: 3}
+  m_Name: EdgeSettings
+  m_EditorClassIdentifier: Assembly-CSharp::Squirrel.Edge.EdgeSettings
+  startRadius: 62
+  finalRadius: 4
+  phaseCount: 4
+  firstHoldTime: 40
+  firstShrinkTime: 12
+  escalation: 0.65
+  shrinkEscalation: 0.65
+  warningTime: 5
+  collapseAfterLastPhase: 1
+  collapseHoldTime: 8
+  collapseTime: 10
+  maxHealth: 5
+  drainPerSecond: 1.5
+  regenPerSecond: 0.5
+  regenDelay: 2
+  respawnGrace: 2

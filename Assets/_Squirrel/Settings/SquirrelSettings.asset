@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7c90786d5728e444894c619d3c2ce0bb, type: 3}
+  m_Name: SquirrelSettings
+  m_EditorClassIdentifier: Assembly-CSharp::Squirrel.SquirrelSettings
+  maxRunSpeed: 9
+  groundAcceleration: 90
+  groundDeceleration: 120
+  turnMultiplier: 1.6
+  airAcceleration: 65
+  airDeceleration: 35
+  jumpHeight: 3.2
+  timeToApex: 0.36
+  fallGravityMultiplier: 1.8
+  jumpCutGravityMultiplier: 3
+  apexThreshold: 1.5
+  apexGravityMultiplier: 0.55
+  maxFallSpeed: 18
+  coyoteTime: 0.1
+  jumpBufferTime: 0.12
+  cornerCorrection: 0.25
+  wallClingEnabled: 1
+  wallJumpUnlocked: 1
+  wallSlideSpeed: 2.5
+  wallFastSlideSpeed: 8
+  wallClimbSpeed: 4
+  wallJumpHorizontalSpeed: 9
+  wallJumpHeight: 2.8
+  wallJumpInputLock: 0.14
+  wallStickTime: 0.12
+  wallCoyoteTime: 0.1
+  glideUnlocked: 0
+  glideFallSpeed: 2.2
+  squashAmount: 0.18
+  squashRecoverSpeed: 10

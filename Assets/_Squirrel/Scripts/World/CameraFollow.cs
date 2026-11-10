@@ -16,7 +16,7 @@ namespace Squirrel.World
 
         void Awake()
         {
-            if (target == null) target = FindFirstObjectByType<SquirrelController>();
+            if (target == null) target = FindAnyObjectByType<SquirrelController>();
         }
 
         void LateUpdate()

@@ -32,7 +32,7 @@ namespace Squirrel.Edge
         void Awake()
         {
             if (squirrel == null) squirrel = GetComponent<SquirrelController>();
-            if (zone == null) zone = FindFirstObjectByType<EdgeZone>();
+            if (zone == null) zone = FindAnyObjectByType<EdgeZone>();
             startPosition = transform.position;
         }
 

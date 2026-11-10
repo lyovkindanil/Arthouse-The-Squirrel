@@ -13,24 +13,14 @@
 - **Мир** (`Scripts/World`): гнёзда (чекпоинт, в гнезде время Края стоит), Сердце (дотронулся — Край замер), простая камера, отладочный HUD.
 - **Сборщик сцены** (`Editor/GreyboxBuilder.cs`): меню **Squirrel → Собрать серую комнату** создаёт всю сцену одной кнопкой.
 
-## Как запустить (один раз)
+## Как запустить
 
-Нужен **Unity 6 LTS** (6000.x).
+Нужен **Unity 6** (проверено на 6000.6.8f1). Репозиторий — готовый Unity-проект (Input System, URP и 2D-пакеты уже в Packages/manifest.json).
 
-1. В Unity Hub создай новый проект по шаблону **Universal 2D** в любой папке, например `ArthouseSquirrel`. Открой и закрой его.
-2. В папке этого проекта выполни:
-   ```
-   git init
-   git remote add origin https://github.com/lyovkindanil/Arthouse-The-Squirrel.git
-   git pull origin main
-   ```
-   В проекте появятся `Assets/_Squirrel`, этот README и `.gitignore`.
-3. Открой проект. Если в Package Manager нет пакета **Input System** — установи его и согласись на перезапуск редактора.
-4. Меню **Squirrel → Собрать серую комнату**, затем **Play**.
-5. Чтобы репозиторий стал полноценным проектом, закоммить и запушь `Packages/` и `ProjectSettings/`:
-   ```
-   git add -A && git commit -m "Unity project settings" && git push -u origin main
-   ```
+1. `git clone https://github.com/lyovkindanil/Arthouse-The-Squirrel.git` и открой папку через Unity Hub → Add.
+2. Открой сцену Assets/_Squirrel/Scenes/Greybox.unity и жми **Play**.
+3. Чтобы пересобрать сцену с нуля: меню **Squirrel → Собрать серую комнату** (настройки-ассеты не трогаются).
+   Из консоли: `Unity.exe -batchmode -quit -projectPath . -executeMethod SquirrelEditor.GreyboxBuilder.Build`.
 
 ## Управление
 

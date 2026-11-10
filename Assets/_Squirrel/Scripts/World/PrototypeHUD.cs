@@ -22,9 +22,9 @@ namespace Squirrel.World
 
         void Awake()
         {
-            if (zone == null) zone = FindFirstObjectByType<EdgeZone>();
-            if (exposure == null) exposure = FindFirstObjectByType<EdgeExposure>();
-            if (squirrel == null) squirrel = FindFirstObjectByType<SquirrelController>();
+            if (zone == null) zone = FindAnyObjectByType<EdgeZone>();
+            if (exposure == null) exposure = FindAnyObjectByType<EdgeExposure>();
+            if (squirrel == null) squirrel = FindAnyObjectByType<SquirrelController>();
         }
 
         void Update()
