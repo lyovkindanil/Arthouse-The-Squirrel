@@ -8,4 +8,10 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_Squirrel/Scenes/Greybox.unity
     guid: a0b36eedd5c2ccf439d64e0c361a3813
+  - enabled: 1
+    path: Assets/_Squirrel/Scenes/Arena.unity
+    guid: ccbce7855033f9f4785c18d613c6133d
+  - enabled: 1
+    path: Assets/_Squirrel/Scenes/MossCradle.unity
+    guid: 1b71e5ea1a8c50d41a76e8b0ea3a02e6
   m_configObjects: {}

@@ -46,10 +46,19 @@ namespace Squirrel
             }
         }
 
+        public Vector2 WorldCenter => Center;
+        public Vector2 WorldSize => Size;
+        /// <summary>Тело белки в мировых координатах — для попаданий врагов.</summary>
+        public Rect WorldRect => new Rect(Center - Size * 0.5f, Size);
+
         /// <summary>Сколько можно пройти из origin в направлении dir, не врезавшись (не больше distance).</summary>
         float FreeDistance(Vector2 origin, Vector2 dir, float distance, out bool blocked)
+            => FreeDistance(origin, dir, distance, out blocked, out _);
+
+        float FreeDistance(Vector2 origin, Vector2 dir, float distance, out bool blocked, out Collider2D blocker)
         {
             blocked = false;
+            blocker = null;
             Vector2 castSize = Size - Vector2.one * (skin * 2f);
             int n = Physics2D.BoxCast(origin, castSize, 0f, dir, filter, hits, distance + skin);
             float best = distance;
@@ -60,7 +69,7 @@ namespace Squirrel
                 // Игнорируем поверхности, от которых мы и так уходим (например, начальное перекрытие).
                 if (Vector2.Dot(h.normal, dir) >= 0f) continue;
                 float d = Mathf.Max(0f, h.distance - skin);
-                if (d < best) { best = d; blocked = true; }
+                if (d < best) { best = d; blocked = true; blocker = h.collider; }
             }
             return best;
         }
@@ -69,6 +78,13 @@ namespace Squirrel
         public bool Probe(Vector2 dir, float distance = 0.04f)
         {
             FreeDistance(Center, dir, distance, out bool blocked);
+            return blocked;
+        }
+
+        /// <summary>То же, но возвращает, обо что упёрлись (кора это или камень).</summary>
+        public bool Probe(Vector2 dir, out Collider2D surface, float distance = 0.04f)
+        {
+            FreeDistance(Center, dir, distance, out bool blocked, out surface);
             return blocked;
         }
 

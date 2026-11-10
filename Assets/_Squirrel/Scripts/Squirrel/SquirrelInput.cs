@@ -5,16 +5,26 @@ namespace Squirrel
 {
     /// <summary>
     /// Ввод через новый Input System. Действия создаются в коде, чтобы прототип работал без .inputactions-файла.
-    /// Клавиатура: A/D или стрелки — бег, W/S — лазание, Пробел — прыжок. Геймпад: левый стик и кнопка South (A / Крест).
+    /// Клавиатура: A/D или стрелки — бег, W/S — вверх/вниз, Пробел/Z — прыжок,
+    /// X/J — удар хвостом, C/K — жёлудь, V/L (держать) — лечение.
+    /// Геймпад: левый стик, South — прыжок, West — удар, правый бампер — жёлудь, North (держать) — лечение.
+    /// Читается раньше остальных скриптов, чтобы «нажато в этом кадре» видели все в том же кадре.
     /// </summary>
+    [DefaultExecutionOrder(-100)]
     public class SquirrelInput : MonoBehaviour
     {
         InputAction move;
         InputAction jump;
+        InputAction attack;
+        InputAction throwAcorn;
+        InputAction heal;
 
         public Vector2 Move { get; private set; }
         public bool JumpHeld { get; private set; }
         public bool JumpPressedThisFrame { get; private set; }
+        public bool AttackPressedThisFrame { get; private set; }
+        public bool ThrowPressedThisFrame { get; private set; }
+        public bool HealHeld { get; private set; }
 
         void Awake()
         {
@@ -28,27 +38,44 @@ namespace Squirrel
             move.AddBinding("<Gamepad>/leftStick");
             move.AddBinding("<Gamepad>/dpad");
 
-            jump = new InputAction("Jump", InputActionType.Button);
-            jump.AddBinding("<Keyboard>/space");
-            jump.AddBinding("<Keyboard>/z");
-            jump.AddBinding("<Gamepad>/buttonSouth");
+            jump = Button("Jump", "<Keyboard>/space", "<Keyboard>/z", "<Gamepad>/buttonSouth");
+            attack = Button("Attack", "<Keyboard>/x", "<Keyboard>/j", "<Gamepad>/buttonWest");
+            throwAcorn = Button("Throw", "<Keyboard>/c", "<Keyboard>/k", "<Gamepad>/rightShoulder");
+            heal = Button("Heal", "<Keyboard>/v", "<Keyboard>/l", "<Gamepad>/buttonNorth");
         }
 
-        void OnEnable() { move.Enable(); jump.Enable(); }
-        void OnDisable() { move.Disable(); jump.Disable(); }
-        void OnDestroy() { move.Dispose(); jump.Dispose(); }
+        static InputAction Button(string name, params string[] bindings)
+        {
+            var a = new InputAction(name, InputActionType.Button);
+            foreach (var b in bindings) a.AddBinding(b);
+            return a;
+        }
+
+        InputAction[] All => new[] { move, jump, attack, throwAcorn, heal };
+
+        void OnEnable() { foreach (var a in All) a.Enable(); }
+        void OnDisable() { foreach (var a in All) a.Disable(); }
+        void OnDestroy() { foreach (var a in All) a.Dispose(); }
 
         // Подмена ввода для автотестов и будущих скриптовых сцен (катсцены, туториал).
         bool overridden;
         Vector2 overrideMove;
-        bool overrideJump;
+        bool overrideJump, overrideAttack, overrideThrow, overrideHeal;
+        bool prevAttack, prevThrow;
 
         /// <summary>Управлять белкой из кода вместо клавиатуры/геймпада.</summary>
         public void SetOverride(Vector2 moveValue, bool jumpHeld)
+            => SetOverride(moveValue, jumpHeld, false);
+
+        /// <summary>То же, с кнопками боя. «Нажатие» срабатывает, когда кнопка переходит из false в true.</summary>
+        public void SetOverride(Vector2 moveValue, bool jumpHeld, bool attackHeld, bool throwHeld = false, bool healHeld = false)
         {
             overridden = true;
             overrideMove = moveValue;
             overrideJump = jumpHeld;
+            overrideAttack = attackHeld;
+            overrideThrow = throwHeld;
+            overrideHeal = healHeld;
         }
 
         public void ClearOverride() => overridden = false;
@@ -60,6 +87,11 @@ namespace Squirrel
                 Move = overrideMove;
                 JumpPressedThisFrame = overrideJump && !JumpHeld;
                 JumpHeld = overrideJump;
+                AttackPressedThisFrame = overrideAttack && !prevAttack;
+                prevAttack = overrideAttack;
+                ThrowPressedThisFrame = overrideThrow && !prevThrow;
+                prevThrow = overrideThrow;
+                HealHeld = overrideHeal;
                 return;
             }
 
@@ -70,6 +102,11 @@ namespace Squirrel
             Move = m;
             JumpHeld = jump.IsPressed();
             JumpPressedThisFrame = jump.WasPressedThisFrame();
+            AttackPressedThisFrame = attack.WasPressedThisFrame();
+            ThrowPressedThisFrame = throwAcorn.WasPressedThisFrame();
+            HealHeld = heal.IsPressed();
+            prevAttack = attack.IsPressed();
+            prevThrow = throwAcorn.IsPressed();
         }
     }
 }

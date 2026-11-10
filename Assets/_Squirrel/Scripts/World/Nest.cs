@@ -1,10 +1,13 @@
 using UnityEngine;
+using System;
+using Squirrel.Combat;
 using Squirrel.Edge;
 
 namespace Squirrel.World
 {
     /// <summary>
     /// Гнездо — чекпоинт. Пока белка в гнезде, Край стоит. Последнее посещённое гнездо — точка возврата.
+    /// Отдых в гнезде возвращает все зёрна и жёлуди.
     /// Проверка по расстоянию, без физики, чтобы не зависеть от Rigidbody.
     /// </summary>
     public class Nest : MonoBehaviour
@@ -18,6 +21,11 @@ namespace Squirrel.World
         [SerializeField] Color activeColor = new Color(0.95f, 0.8f, 0.45f);
 
         public static Nest LastVisited { get; private set; }
+        /// <summary>Белка пришла отдохнуть (тут сохраняется игра).</summary>
+        public static event Action<Nest> Rested;
+
+        /// <summary>Сделать гнездо точкой возврата без отдыха (загрузка сохранения).</summary>
+        public static void MarkVisited(Nest n) => LastVisited = n;
         public Vector3 SpawnPoint => transform.position + (Vector3)spawnOffset;
         public bool Occupied { get; private set; }
 
@@ -45,7 +53,15 @@ namespace Squirrel.World
             {
                 Occupied = inside;
                 if (zone != null) zone.SetPaused(this, inside);
-                if (inside) LastVisited = this;
+                if (inside)
+                {
+                    LastVisited = this;
+                    var health = squirrel.GetComponent<SquirrelHealth>();
+                    if (health != null && !health.IsDead) health.Restore();
+                    var thrower = squirrel.GetComponent<AcornThrower>();
+                    if (thrower != null) thrower.Refill();
+                    Rested?.Invoke(this);
+                }
             }
             if (marker != null)
                 marker.color = LastVisited == this ? activeColor : idleColor;

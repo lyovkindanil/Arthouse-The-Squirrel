@@ -1,48 +1,39 @@
-using System;
 using UnityEngine;
-using Squirrel.World;
+using Squirrel.Combat;
 
 namespace Squirrel.Edge
 {
     /// <summary>
-    /// Вешается на белку. За Краем тают «зёрна» здоровья. Когда они кончились —
-    /// «провал глубже в сон»: возврат в последнее гнездо, Край откатывается на фазу, растёт глубина сна.
+    /// Вешается на белку. За Краем тают зёрна здоровья (общие с боем, см. SquirrelHealth).
+    /// Внутри зоны подтаявшее зерно восстанавливается, целые — нет.
+    /// Когда зёрна кончились за Краем — «провал глубже в сон» (обрабатывает Respawner).
     /// </summary>
     public class EdgeExposure : MonoBehaviour
     {
         [SerializeField] EdgeZone zone;
-        [SerializeField] SquirrelController squirrel;
-        [Tooltip("Точка возврата, если гнёзд ещё не было")]
-        [SerializeField] Transform fallbackSpawn;
+        [SerializeField] SquirrelHealth health;
 
         float regenTimer;
         float graceTimer;
-        Vector3 startPosition;
 
-        public float Health { get; private set; }
-        public float MaxHealth => zone != null ? zone.Settings.maxHealth : 1f;
         public bool IsOutside { get; private set; }
-        /// <summary>Скрытый счётчик «глубины сна» (в игре повлияет на сюжет).</summary>
-        public int SleepDepth { get; private set; }
         /// <summary>Расстояние до Края: + внутри, − снаружи.</summary>
         public float DistanceToEdge { get; private set; }
-
-        public event Action<int> FellDeeper;
+        public bool InGrace => graceTimer > 0f;
+        public EdgeZone Zone => zone;
 
         void Awake()
         {
-            if (squirrel == null) squirrel = GetComponent<SquirrelController>();
+            if (health == null) health = GetComponent<SquirrelHealth>();
             if (zone == null) zone = FindAnyObjectByType<EdgeZone>();
-            startPosition = transform.position;
         }
-
-        void Start() => Health = MaxHealth;
 
         void Update()
         {
-            if (zone == null) return;
+            if (zone == null || health == null) return;
             var s = zone.Settings;
             float dt = Time.deltaTime;
+            if (dt <= 0f) return;
             graceTimer -= dt;
 
             DistanceToEdge = zone.SignedDistanceInside(transform.position);
@@ -50,31 +41,21 @@ namespace Squirrel.Edge
 
             if (IsOutside && graceTimer <= 0f)
             {
-                Health -= s.drainPerSecond * dt;
+                health.Drain(s.drainPerSecond * dt);
                 regenTimer = s.regenDelay;
-                if (Health <= 0f) FallDeeper();
             }
             else
             {
                 regenTimer -= dt;
-                if (regenTimer <= 0f) Health = Mathf.Min(MaxHealth, Health + s.regenPerSecond * dt);
+                if (regenTimer <= 0f) health.RegenPartial(s.regenPerSecond * dt);
             }
         }
 
-        void FallDeeper()
+        /// <summary>Неуязвимость к Краю (после возврата в гнездо).</summary>
+        public void GiveGrace(float seconds)
         {
-            SleepDepth++;
-            zone.RollBackOnePhase();
-            Vector3 target = Nest.LastVisited != null ? Nest.LastVisited.SpawnPoint
-                           : fallbackSpawn != null ? fallbackSpawn.position
-                           : startPosition;
-            squirrel.Teleport(target);
-            Health = MaxHealth;
-            graceTimer = zone.Settings.respawnGrace;
-            FellDeeper?.Invoke(SleepDepth);
-            Debug.Log($"Белка провалилась глубже в сон. Глубина: {SleepDepth}");
+            graceTimer = Mathf.Max(graceTimer, seconds);
+            IsOutside = false;
         }
-
-        public bool InGrace => graceTimer > 0f;
     }
 }

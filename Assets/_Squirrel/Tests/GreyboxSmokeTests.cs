@@ -3,6 +3,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using Squirrel.Combat;
 using Squirrel.Edge;
 using Squirrel.World;
 
@@ -18,6 +19,8 @@ namespace Squirrel.Tests
         SquirrelInput input;
         EdgeZone zone;
         EdgeExposure exposure;
+        SquirrelHealth health;
+        Respawner respawner;
         Heart heart;
 
         [UnitySetUp]
@@ -28,6 +31,8 @@ namespace Squirrel.Tests
             squirrel = Object.FindAnyObjectByType<SquirrelController>();
             input = squirrel.GetComponent<SquirrelInput>();
             exposure = squirrel.GetComponent<EdgeExposure>();
+            health = squirrel.GetComponent<SquirrelHealth>();
+            respawner = squirrel.GetComponent<Respawner>();
             zone = Object.FindAnyObjectByType<EdgeZone>();
             heart = Object.FindAnyObjectByType<Heart>();
             input.SetOverride(Vector2.zero, false);
@@ -158,21 +163,21 @@ namespace Squirrel.Tests
             Assert.AreEqual(EdgeStage.Hold, zone.Stage);
 
             int fell = 0;
-            exposure.FellDeeper += _ => fell++;
+            respawner.FellDeeper += _ => fell++;
             Place(-30f, 0.05f);
             yield return null;
             Assert.IsTrue(exposure.IsOutside, "белка за Краем");
 
-            float end = Time.time + exposure.MaxHealth / zone.Settings.drainPerSecond + 2f;
+            float end = Time.time + health.Max / zone.Settings.drainPerSecond + 2f;
             while (fell == 0 && Time.time < end) yield return null;
 
             yield return null; // IsOutside пересчитывается в следующем кадре
             Assert.AreEqual(1, fell, "провал глубже в сон");
-            Assert.AreEqual(1, exposure.SleepDepth);
+            Assert.AreEqual(1, respawner.SleepDepth);
             Assert.AreEqual(1, zone.Phase, "Край откатился на фазу");
             Assert.AreEqual(EdgeStage.Hold, zone.Stage);
             Assert.Less(Vector2.Distance(squirrel.transform.position, nest2.SpawnPoint), 0.5f, "вернулась в гнездо 2");
-            Assert.AreEqual(exposure.MaxHealth, exposure.Health, 0.001f);
+            Assert.AreEqual(health.Max, health.Current, 0.001f);
             Assert.IsFalse(exposure.IsOutside);
         }
 
@@ -188,6 +193,44 @@ namespace Squirrel.Tests
             zone.DebugSkipStage();
             yield return WaitSeconds(0.2f);
             Assert.AreEqual(r, zone.Radius, 0.0001f, "Край больше не двигается");
+        }
+
+        [UnityTest]
+        public IEnumerator Edge_Drain_Melts_Seeds_And_Only_Partial_Seed_Regrows()
+        {
+            Place(-20f, 0.05f);
+            yield return null;
+            while (zone.Phase < 2) { zone.DebugSkipStage(); yield return null; }
+            Place(-30f, 0.05f); // за Краем
+            float end = Time.time + 1.2f / zone.Settings.drainPerSecond; // ~1.2 зерна
+            while (Time.time < end) yield return null;
+            Assert.Less(health.Current, health.Max - 1f, "растаяло больше одного зерна");
+            float melted = health.Current;
+
+            Place(14f, 20.55f); // обратно в зону: платформа D рядом с Сердцем (гнездо не трогаем — оно лечит)
+            yield return WaitSeconds(zone.Settings.regenDelay + 2.5f);
+            Assert.IsFalse(exposure.IsOutside);
+            Assert.AreEqual(Mathf.Ceil(melted), health.Current, 0.001f, "вернулось только подтаявшее зерно");
+        }
+
+        [UnityTest]
+        public IEnumerator Memory_Pushes_Edge_Back()
+        {
+            Memory memory = null;
+            foreach (var m in Object.FindObjectsByType<Memory>())
+                if (m.name.StartsWith("Memory 1")) memory = m;
+            Assert.IsNotNull(memory, "в комнате есть воспоминание");
+
+            Place(-20f, 0.05f);
+            yield return null;
+            float r0 = zone.Radius;
+            Place(memory.transform.position.x, memory.transform.position.y - 0.35f);
+            yield return null;
+            yield return null;
+            Assert.IsTrue(memory.Collected, "белка подобрала воспоминание");
+            yield return WaitSeconds(memory.PushBackAmount / 3f + 0.5f);
+            Assert.AreEqual(r0 + memory.PushBackAmount, zone.Radius, 0.05f, "Край отступил");
+            Assert.AreEqual(memory.PushBackAmount, zone.PushedBack, 0.001f);
         }
     }
 }

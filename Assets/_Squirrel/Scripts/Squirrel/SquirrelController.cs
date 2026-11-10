@@ -8,7 +8,7 @@ namespace Squirrel
     /// Конечный автомат белки: на земле, в воздухе, на стене.
     /// Все числа — в SquirrelSettings.
     /// </summary>
-    [RequireComponent(typeof(SquirrelMotor), typeof(SquirrelInput))]
+    [RequireComponent(typeof(SquirrelMotor), typeof(SquirrelInput), typeof(SquirrelAbilities))]
     public class SquirrelController : MonoBehaviour
     {
         [SerializeField] SquirrelSettings settings;
@@ -17,6 +17,8 @@ namespace Squirrel
 
         SquirrelMotor motor;
         SquirrelInput input;
+        SquirrelAbilities abilities;
+        bool wallIsBark;
 
         Vector2 velocity;
         float coyoteTimer, jumpBufferTimer, wallCoyoteTimer, inputLockTimer, wallUnstickTimer;
@@ -30,11 +32,14 @@ namespace Squirrel
         public int Facing { get; private set; } = 1;
         public bool IsGliding { get; private set; }
         public SquirrelSettings Settings => settings;
+        /// <summary>Белка стоит на месте (лечение): бег отключён, прыжок работает и прерывает лечение.</summary>
+        public bool Rooted { get; set; }
 
         void Awake()
         {
             motor = GetComponent<SquirrelMotor>();
             input = GetComponent<SquirrelInput>();
+            abilities = GetComponent<SquirrelAbilities>();
             if (visual != null) visualBaseScale = visual.localScale;
             if (settings == null)
             {
@@ -60,10 +65,13 @@ namespace Squirrel
             // --- Сенсоры ---
             bool grounded = velocity.y <= 0.01f && motor.Probe(Vector2.down);
             wallDir = 0;
+            wallIsBark = false;
             if (!grounded)
             {
-                if (motor.Probe(Vector2.right)) wallDir = 1;
-                else if (motor.Probe(Vector2.left)) wallDir = -1;
+                if (motor.Probe(Vector2.right, out var wr)) { wallDir = 1; wallIsBark = BarkSurface.Is(wr); }
+                else if (motor.Probe(Vector2.left, out var wl)) { wallDir = -1; wallIsBark = BarkSurface.Is(wl); }
+                // За кору можно держаться всегда, за камень — только освоив отталкивание.
+                if (wallDir != 0 && !wallIsBark && !abilities.WallJump) wallDir = 0;
             }
 
             // --- Переходы состояний ---
@@ -92,7 +100,7 @@ namespace Squirrel
             }
             else if (inputLockTimer <= 0f)
             {
-                float target = move.x * s.maxRunSpeed;
+                float target = Rooted ? 0f : move.x * s.maxRunSpeed;
                 bool onGround = State == SquirrelState.Grounded;
                 float accel;
                 if (Mathf.Approximately(move.x, 0f))
@@ -116,7 +124,7 @@ namespace Squirrel
                     break;
 
                 case SquirrelState.OnWall:
-                    if (move.y > 0f && s.wallClimbSpeed > 0f)
+                    if (move.y > 0f && s.wallClimbSpeed > 0f && wallIsBark)
                         velocity.y = s.wallClimbSpeed;
                     else if (move.y < 0f)
                         velocity.y = -s.wallFastSlideSpeed;
@@ -132,7 +140,7 @@ namespace Squirrel
                     else if (velocity.y < 0f) g *= s.fallGravityMultiplier;
                     velocity.y -= g * dt;
 
-                    if (s.glideUnlocked && velocity.y < 0f && input.JumpHeld && !isJumping)
+                    if (abilities.Glide && velocity.y < 0f && input.JumpHeld && !isJumping)
                     {
                         velocity.y = Mathf.Max(velocity.y, -s.glideFallSpeed);
                         IsGliding = true;
@@ -149,7 +157,7 @@ namespace Squirrel
                 {
                     DoJump(s.JumpVelocity);
                 }
-                else if (s.wallJumpUnlocked && (State == SquirrelState.OnWall || wallCoyoteTimer > 0f))
+                else if (abilities.WallJump && (State == SquirrelState.OnWall || wallCoyoteTimer > 0f))
                 {
                     int dir = State == SquirrelState.OnWall ? wallDir : lastWallDir;
                     velocity.x = -dir * s.wallJumpHorizontalSpeed;
@@ -166,7 +174,7 @@ namespace Squirrel
             if (c.below && velocity.y < 0f) velocity.y = 0f;
             if ((c.left && velocity.x < 0f) || (c.right && velocity.x > 0f)) velocity.x = 0f;
 
-            if (State != SquirrelState.OnWall && Mathf.Abs(move.x) > 0f && inputLockTimer <= 0f)
+            if (State != SquirrelState.OnWall && Mathf.Abs(move.x) > 0f && inputLockTimer <= 0f && !Rooted)
                 Facing = move.x > 0 ? 1 : -1;
             else if (State == SquirrelState.OnWall)
                 Facing = wallDir;
@@ -224,6 +232,35 @@ namespace Squirrel
                 visualBaseScale.z);
         }
 
+        /// <summary>Отбрасывание от удара: задаёт скорость и на время отбирает управление по X.</summary>
+        public void Knockback(Vector2 newVelocity, float lockTime)
+        {
+            velocity = newVelocity;
+            inputLockTimer = Mathf.Max(inputLockTimer, lockTime);
+            isJumping = false;
+            jumpBufferTimer = 0f;
+            coyoteTimer = 0f;
+            wallCoyoteTimer = 0f;
+            State = SquirrelState.Airborne;
+        }
+
+        /// <summary>Отскок вверх после удара хвостом вниз по врагу. Высота не зависит от кнопки прыжка.</summary>
+        public void Pogo(float upVelocity)
+        {
+            velocity.y = upVelocity;
+            isJumping = false;
+            coyoteTimer = 0f;
+            State = SquirrelState.Airborne;
+            Squash(1f - settings.squashAmount * 0.6f, 1f + settings.squashAmount * 0.6f);
+        }
+
+        /// <summary>Отдача по X после удара вбок.</summary>
+        public void Recoil(float vx, float lockTime)
+        {
+            velocity.x = vx;
+            inputLockTimer = Mathf.Max(inputLockTimer, lockTime);
+        }
+
         /// <summary>Перенос белки (возврат в гнездо и т.п.).</summary>
         public void Teleport(Vector2 position)
         {
@@ -231,6 +268,8 @@ namespace Squirrel
             velocity = Vector2.zero;
             State = SquirrelState.Airborne;
             isJumping = false;
+            inputLockTimer = 0f;
+            Rooted = false;
         }
     }
 }
