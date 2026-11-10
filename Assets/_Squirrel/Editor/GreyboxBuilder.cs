@@ -34,6 +34,7 @@ namespace SquirrelEditor
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
+            UrpSetup.Run();
             EnsureFolder(Generated);
             EnsureFolder(SettingsDir);
             EnsureFolder(Root + "/Scenes");
