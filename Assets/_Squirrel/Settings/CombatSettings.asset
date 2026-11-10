@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ccb5cbd1a37b4bcb9c3ad86526525ca2, type: 3}
+  m_Name: CombatSettings
+  m_EditorClassIdentifier: Squirrel.Runtime::Squirrel.Combat.CombatSettings
+  maxSeeds: 5
+  invulnerableTime: 1
+  hurtKnockback: {x: 8, y: 7}
+  hurtInputLock: 0.2
+  maxSap: 9
+  sapPerHit: 1
+  healCost: 3
+  healTime: 0.9
+  tailDamage: 1
+  tailCooldown: 0.3
+  tailActiveTime: 0.1
+  tailBuffer: 0.12
+  tailSideSize: {x: 1.7, y: 1}
+  tailSideReach: 0.95
+  tailVerticalSize: {x: 1.3, y: 1.5}
+  tailVerticalReach: 1
+  pogoVelocity: 13
+  sideRecoil: 5
+  recoilLock: 0.08
+  acornDamage: 1
+  maxAcorns: 3
+  acornRecharge: 2.5
+  acornCooldown: 0.35
+  acornSpeed: 22
+  acornGravity: 4
+  acornLifetime: 1.2
+  hitStopOnHit: 0.04
+  hitStopOnHurt: 0.1
+  shakeOnHit: 0.12
+  shakeOnHurt: 0.35
