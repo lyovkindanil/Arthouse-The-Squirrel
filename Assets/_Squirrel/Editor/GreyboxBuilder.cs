@@ -236,11 +236,25 @@ namespace SquirrelEditor
             var body = new GameObject("Visual").transform;
             body.SetParent(sq.transform, false);
             // Визуал с пивотом у ног, чтобы сжатие при приземлении шло от земли.
-            MakeSprite(body, "Body", new Vector2(0, 0.35f), new Vector2(0.9f, 0.7f), new Color(0.92f, 0.52f, 0.22f), 110);
-            var tail = MakeSprite(body, "Tail", new Vector2(-0.55f, 0.75f), new Vector2(0.45f, 0.9f), new Color(0.75f, 0.38f, 0.16f), 109);
-            tail.transform.localRotation = Quaternion.Euler(0, 0, -15);
-            MakeSprite(body, "Ear", new Vector2(0.28f, 0.78f), new Vector2(0.14f, 0.2f), new Color(0.75f, 0.38f, 0.16f), 111);
-            MakeSprite(body, "Eye", new Vector2(0.3f, 0.5f), new Vector2(0.12f, 0.12f), new Color(0.08f, 0.06f, 0.05f), 112);
+            var concept = LoadSquirrelConcept();
+            if (concept != null)
+            {
+                // Белка из концепт-арта: один спрайт + мягкое голубое свечение за ней.
+                MakeShape(body, "Spirit Glow", glow, new Vector2(-0.15f, 0.7f), new Vector2(3.2f, 2.8f), new Color(0.45f, 0.7f, 1f, 0.22f), 108);
+                var art = new GameObject("Concept Sprite").AddComponent<SpriteRenderer>();
+                art.transform.SetParent(body, false);
+                art.sprite = concept;
+                art.sharedMaterial = unlit;
+                art.sortingOrder = 110;
+            }
+            else
+            {
+                MakeSprite(body, "Body", new Vector2(0, 0.35f), new Vector2(0.9f, 0.7f), new Color(0.92f, 0.52f, 0.22f), 110);
+                var tail = MakeSprite(body, "Tail", new Vector2(-0.55f, 0.75f), new Vector2(0.45f, 0.9f), new Color(0.75f, 0.38f, 0.16f), 109);
+                tail.transform.localRotation = Quaternion.Euler(0, 0, -15);
+                MakeSprite(body, "Ear", new Vector2(0.28f, 0.78f), new Vector2(0.14f, 0.2f), new Color(0.75f, 0.38f, 0.16f), 111);
+                MakeSprite(body, "Eye", new Vector2(0.3f, 0.5f), new Vector2(0.12f, 0.12f), new Color(0.08f, 0.06f, 0.05f), 112);
+            }
             Set(controller, "settings", squirrelSettings);
             Set(controller, "visual", body);
 
