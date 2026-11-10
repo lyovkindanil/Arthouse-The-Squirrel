@@ -17,7 +17,18 @@ namespace Squirrel.World
         Vector3 basePos;
 
         public bool Broken { get; private set; }
-        public bool Unbreakable { get; set; }
+        bool unbreakable;
+        /// <summary>Камень больше не поддаётся (например, после выбора «забрать запас»).</summary>
+        public bool Unbreakable
+        {
+            get => unbreakable;
+            set
+            {
+                unbreakable = value;
+                var hint = GetComponent<WorldHint>();
+                if (hint != null && value) hint.Text = "Камень больше не поддаётся";
+            }
+        }
         public int HitsLeft => left;
         public event Action BrokenEvent;
 
@@ -45,7 +56,10 @@ namespace Squirrel.World
         {
             Broken = true;
             GetComponent<BoxCollider2D>().enabled = false;
-            if (sprite != null) sprite.enabled = false;
+            // Прячем и сам камень, и трещины на нём.
+            foreach (var r in GetComponentsInChildren<Renderer>()) r.enabled = false;
+            var hint = GetComponent<WorldHint>();
+            if (hint != null) hint.enabled = false;
         }
 
         void Break()

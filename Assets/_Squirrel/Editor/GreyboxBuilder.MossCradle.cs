@@ -78,13 +78,32 @@ namespace SquirrelEditor
             heartGo.transform.position = new Vector3(heartCell.x + 0.5f, heartCell.y + 0.5f);
             var heartVisual = MakeSprite(heartGo.transform, "Visual", Vector2.zero, new Vector2(0.9f, 0.9f), new Color(1f, 0.35f, 0.55f), 20);
             heartVisual.transform.localRotation = Quaternion.Euler(0, 0, 45);
+            // Кольцо и свечение вокруг Сердца бьются вместе с ним — его видно издалека.
+            MakeShape(heartVisual.transform, "Glow", glow, Vector2.zero, new Vector2(4.5f, 4.5f), new Color(1f, 0.4f, 0.6f, 0.4f), 18);
+            MakeShape(heartVisual.transform, "Ring", ring, Vector2.zero, new Vector2(2.2f, 2.2f), new Color(1f, 0.6f, 0.75f, 0.8f), 19);
             var heart = heartGo.AddComponent<Heart>();
+            AddHint(heartGo, "Сердце колыбели: коснись — Край остановится", new Vector2(0f, 1.6f), 6f, new Color(1f, 0.75f, 0.85f));
 
             var zoneGo = new GameObject("Edge (Край)");
             var zone = zoneGo.AddComponent<EdgeZone>();
             Set(zone, "settings", edgeSettings);
             Set(zone, "center", heartGo.transform);
-            Set(zoneGo.AddComponent<EdgeVisual>(), "material", unlit);
+            // Край меряет расстояние по проходам карты и растёт ещё и из очагов (символ * на карте).
+            var field = zoneGo.AddComponent<EdgeField>();
+            field.Setup(AssetDatabase.LoadAssetAtPath<TextAsset>(MossCradleMap), heartGo.transform);
+            EditorUtility.SetDirty(field);
+            field.Build();
+            Set(zone, "field", field);
+            Set(zoneGo.AddComponent<EdgeFieldVisual>(), "material", unlit);
+            // Общее кольцо стартует чуть дальше самой дальней точки (по пути), чтобы в начале весь мир был внутри.
+            float startRadius = Mathf.Ceil(field.MaxHeartDistance + 6f);
+            if (!Mathf.Approximately(edgeSettings.startRadius, startRadius))
+            {
+                edgeSettings.startRadius = startRadius;
+                EditorUtility.SetDirty(edgeSettings);
+                AssetDatabase.SaveAssets();
+            }
+            for (int i = 0; i < field.FrontCount; i++) MakeFrontMarker(i, field.Sources[i]);
             Set(heart, "zone", zone);
             Set(heart, "visual", heartVisual.transform);
 
@@ -174,10 +193,25 @@ namespace SquirrelEditor
             var go = new GameObject("Ability Shrine (wall jump)");
             go.transform.SetParent(parent, false);
             go.transform.position = pos;
+            // Каменный постамент + светящийся зелёный знак над ним.
+            MakeSprite(go.transform, "Pedestal", new Vector2(0, -0.35f), new Vector2(1f, 0.3f), new Color(0.5f, 0.55f, 0.52f), 28);
             var v = MakeSprite(go.transform, "Visual", Vector2.zero, new Vector2(0.7f, 0.7f), new Color(0.5f, 1f, 0.6f), 30);
             v.transform.localRotation = Quaternion.Euler(0, 0, 45);
+            MakeShape(v.transform, "Glow", glow, Vector2.zero, new Vector2(4f, 4f), new Color(0.5f, 1f, 0.6f, 0.4f), 29);
             var a = go.AddComponent<AbilityPickup>();
             Set(a, "visual", v.transform);
+            AddHint(v.gameObject, "Святилище: научишься отталкиваться от каменных стен", new Vector2(0f, 1.1f), 4.5f, new Color(0.75f, 1f, 0.8f));
+        }
+
+        /// <summary>Очаг Края: тёмно-оранжевое кольцо, чтобы было видно, откуда ползёт.</summary>
+        static void MakeFrontMarker(int index, Vector2 pos)
+        {
+            var go = new GameObject($"Edge Front {index + 1}");
+            go.transform.position = pos;
+            MakeShape(go.transform, "Glow", glow, Vector2.zero, new Vector2(5f, 5f), new Color(1f, 0.45f, 0.15f, 0.35f), 105);
+            MakeShape(go.transform, "Ring", ring, Vector2.zero, new Vector2(1.6f, 1.6f), new Color(1f, 0.5f, 0.2f, 0.9f), 106);
+            MakeShape(go.transform, "Core", circle, Vector2.zero, new Vector2(0.7f, 0.7f), new Color(0.15f, 0.05f, 0.05f, 1f), 107);
+            AddHint(go, "Очаг Края: пока ты рядом, Край ползёт отсюда", new Vector2(0f, 1.6f), 9f, HintDanger);
         }
 
         static Caterpillar MakeCaterpillar(Vector3 feet, Transform parent)
@@ -189,6 +223,7 @@ namespace SquirrelEditor
             MakeSprite(go.transform, "Eye", new Vector2(0.4f, 0.35f), new Vector2(0.1f, 0.1f), Color.black, 27);
             var c = go.AddComponent<Caterpillar>();
             Set(c, "body", body);
+            AddHint(go, "Гусеница замурована камнем", new Vector2(0f, 1.1f), 4f, HintWarm);
             return c;
         }
 
@@ -200,7 +235,9 @@ namespace SquirrelEditor
             var v = new GameObject("Visual").transform;
             v.SetParent(go.transform, false);
             MakeSprite(v, "Leaves", new Vector2(0, 0.2f), new Vector2(0.9f, 0.4f), new Color(0.4f, 0.65f, 0.25f), 24);
-            MakeSprite(v, "Berry", new Vector2(0.15f, 0.45f), new Vector2(0.25f, 0.25f), new Color(0.8f, 0.2f, 0.35f), 25);
+            MakeShape(v, "Berry", circle, new Vector2(0.15f, 0.45f), new Vector2(0.28f, 0.28f), new Color(0.8f, 0.2f, 0.35f), 25);
+            MakeShape(v, "Berry 2", circle, new Vector2(-0.15f, 0.42f), new Vector2(0.22f, 0.22f), new Color(0.7f, 0.18f, 0.3f), 25);
+            AddHint(v.gameObject, "Запас гусеницы. Ударить — забрать себе (+1 зерно)", new Vector2(0f, 1.1f), 3.5f, HintWarm);
             var s = go.AddComponent<StashPile>();
             SetVector(s, "hitSize", new Vector2(0.9f, 0.7f));
             SetVector(s, "hitOffset", new Vector2(0, 0.35f));
@@ -215,8 +252,17 @@ namespace SquirrelEditor
             go.transform.position = new Vector3(r.x + r.width * 0.5f, r.y + r.height * 0.5f);
             var box = go.AddComponent<BoxCollider2D>();
             box.size = new Vector2(r.width, r.height);
-            var sr = MakeSprite(go.transform, "Visual", Vector2.zero, new Vector2(r.width, r.height), new Color(0.55f, 0.52f, 0.48f), 10);
+            // Светлее обычного камня и в трещинах: видно, что его можно разбить.
+            var sr = MakeSprite(go.transform, "Visual", Vector2.zero, new Vector2(r.width, r.height), new Color(0.62f, 0.56f, 0.48f), 10);
+            var crackColor = new Color(0.2f, 0.17f, 0.15f);
+            var c1 = MakeSprite(go.transform, "Crack 1", new Vector2(-0.1f, 0.15f), new Vector2(0.08f, r.height * 0.7f), crackColor, 11);
+            c1.transform.localRotation = Quaternion.Euler(0, 0, 18);
+            var c2 = MakeSprite(go.transform, "Crack 2", new Vector2(0.15f, -0.3f), new Vector2(0.07f, r.height * 0.45f), crackColor, 11);
+            c2.transform.localRotation = Quaternion.Euler(0, 0, -30);
+            var c3 = MakeSprite(go.transform, "Crack 3", new Vector2(-0.2f, -0.45f), new Vector2(0.06f, r.height * 0.3f), crackColor, 11);
+            c3.transform.localRotation = Quaternion.Euler(0, 0, 55);
             var rock = go.AddComponent<BreakableRock>();
+            AddHint(go, "Трещины: бей хвостом (X), чтобы разбить", new Vector2(0f, r.height * 0.5f + 0.9f), 4f, HintCold);
             SetVector(rock, "hitSize", new Vector2(r.width + 0.1f, r.height));
             SetVector(rock, "hitOffset", Vector2.zero);
             Set(rock, "sprite", sr);

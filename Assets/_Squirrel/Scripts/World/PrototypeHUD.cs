@@ -26,8 +26,12 @@ namespace Squirrel.World
         float roomFlash;
 
         bool showHelp = true;
-        GUIStyle big, small;
+        GUIStyle big, small, hintStyle, arrowStyle;
         float outsideFlash, hurtFlash;
+        // Очаг Края, который сейчас подступает к белке.
+        float frontNear;          // 0..1, насколько близко
+        Vector2 frontDir;         // куда смотреть (в мире)
+        static Texture2D vignette;
 
         void Awake()
         {
@@ -61,6 +65,93 @@ namespace Squirrel.World
             bool outside = exposure != null && exposure.IsOutside;
             outsideFlash = Mathf.MoveTowards(outsideFlash, outside ? 1f : 0f, Time.deltaTime * 3f);
             hurtFlash = Mathf.MoveTowards(hurtFlash, 0f, Time.unscaledDeltaTime * 2.5f);
+            UpdateFrontWarning();
+        }
+
+        void UpdateFrontWarning()
+        {
+            float target = 0f;
+            if (zone != null && squirrel != null && zone.HasFronts && zone.Stage != EdgeStage.Stabilized)
+            {
+                Vector2 p = (Vector2)squirrel.transform.position + Vector2.up * 0.35f;
+                int i = zone.NearestFront(p, out float margin);
+                if (i >= 0 && zone.IsFrontPressing(i))
+                {
+                    target = 1f - Mathf.Clamp01(margin / zone.Settings.frontAwareness);
+                    // Направление на очаг — против роста расстояния до него (по проходам).
+                    var f = zone.Field;
+                    const float e = 0.75f;
+                    Vector2 g = new Vector2(
+                        f.FrontDistance(i, p + Vector2.right * e) - f.FrontDistance(i, p - Vector2.right * e),
+                        f.FrontDistance(i, p + Vector2.up * e) - f.FrontDistance(i, p - Vector2.up * e));
+                    if (g.sqrMagnitude > 1e-4f) frontDir = Vector2.Lerp(frontDir, -g.normalized, Time.unscaledDeltaTime * 6f);
+                }
+            }
+            frontNear = Mathf.MoveTowards(frontNear, target, Time.unscaledDeltaTime * 1.5f);
+        }
+
+        static Texture2D Vignette()
+        {
+            if (vignette != null) return vignette;
+            const int n = 64;
+            vignette = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float dx = (x + 0.5f) / n * 2f - 1f, dy = (y + 0.5f) / n * 2f - 1f;
+                float d = Mathf.Clamp01((Mathf.Sqrt(dx * dx + dy * dy) - 0.55f) / 0.75f);
+                vignette.SetPixel(x, y, new Color(1f, 1f, 1f, d * d));
+            }
+            vignette.Apply();
+            return vignette;
+        }
+
+        void DrawHints()
+        {
+            var cam = Camera.main;
+            if (cam == null || squirrel == null) return;
+            Vector2 from = squirrel.transform.position;
+            foreach (var h in WorldHint.All)
+            {
+                float a = h.Visibility(from);
+                if (a <= 0f || string.IsNullOrEmpty(h.Text)) continue;
+                Vector3 sp = cam.WorldToScreenPoint(h.WorldPoint);
+                if (sp.z < 0f) continue;
+                var rect = new Rect(sp.x - 170, Screen.height - sp.y - 46, 340, 46);
+                GUI.color = new Color(0f, 0f, 0f, 0.55f * a);
+                var size = hintStyle.CalcHeight(new GUIContent(h.Text), 340);
+                GUI.DrawTexture(new Rect(rect.x + 10, rect.yMax - size - 4, 320, size + 6), Texture2D.whiteTexture);
+                var c = h.Color; c.a *= a;
+                GUI.color = c;
+                GUI.Label(new Rect(rect.x, rect.yMax - size - 1, 340, size), h.Text, hintStyle);
+            }
+            GUI.color = Color.white;
+        }
+
+        void DrawFrontWarning()
+        {
+            if (frontNear <= 0.01f) return;
+            // Тёплая виньетка: чем ближе очаг, тем гуще.
+            GUI.color = new Color(1f, 0.45f, 0.15f, frontNear * 0.45f);
+            GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Vignette());
+            var cam = Camera.main;
+            if (cam != null && squirrel != null && frontDir.sqrMagnitude > 0.01f)
+            {
+                Vector3 sp = cam.WorldToScreenPoint(squirrel.transform.position + Vector3.up * 0.5f);
+                Vector2 c = new Vector2(sp.x, Screen.height - sp.y);
+                Vector2 d = new Vector2(frontDir.x, -frontDir.y).normalized;
+                Vector2 at = c + d * 95f;
+                float angle = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg;
+                float pulse = 0.6f + 0.4f * Mathf.Sin(Time.unscaledTime * 8f);
+                GUI.color = new Color(1f, 0.6f, 0.25f, Mathf.Clamp01(frontNear * 1.6f) * pulse);
+                var m = GUI.matrix;
+                GUIUtility.RotateAroundPivot(angle, at);
+                GUI.Label(new Rect(at.x - 30, at.y - 30, 60, 60), "►", arrowStyle);
+                GUI.matrix = m;
+                GUI.color = new Color(1f, 0.7f, 0.4f, Mathf.Clamp01(frontNear * 2f));
+                GUI.Label(new Rect(c.x - 150, c.y + 40, 300, 30), "Край подступает", hintStyle);
+            }
+            GUI.color = Color.white;
         }
 
         void OnGUI()
@@ -71,7 +162,12 @@ namespace Squirrel.World
                 small = new GUIStyle(GUI.skin.label) { fontSize = 15 };
                 center = new GUIStyle(GUI.skin.label) { fontSize = 24, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = true };
                 corner = new GUIStyle(GUI.skin.label) { fontSize = 18, alignment = TextAnchor.UpperRight };
+                hintStyle = new GUIStyle(GUI.skin.label) { fontSize = 16, alignment = TextAnchor.MiddleCenter, wordWrap = true };
+                arrowStyle = new GUIStyle(GUI.skin.label) { fontSize = 40, alignment = TextAnchor.MiddleCenter };
             }
+
+            DrawHints();
+            DrawFrontWarning();
 
             if (Toast.Visible)
             {

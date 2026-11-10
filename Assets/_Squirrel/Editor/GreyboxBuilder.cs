@@ -59,6 +59,7 @@ namespace SquirrelEditor
             EnsureFolder(Root + "/Scenes");
             white = MakeWhiteSprite();
             unlit = MakeUnlitMaterial();
+            PrepareShapes();
             squirrelSettings = LoadOrCreate<SquirrelSettings>(SettingsDir + "/SquirrelSettings.asset");
             edgeSettings = LoadOrCreate<EdgeSettings>(SettingsDir + "/EdgeSettings.asset");
             combatSettings = LoadOrCreate<CombatSettings>(SettingsDir + "/CombatSettings.asset");
@@ -296,6 +297,9 @@ namespace SquirrelEditor
             go.transform.position = pos;
             var visual = MakeSprite(go.transform, "Visual", Vector2.zero, new Vector2(0.45f, 0.45f), MemoryColor, 30);
             visual.transform.localRotation = Quaternion.Euler(0, 0, 45);
+            // Голубое свечение = «подбери». Свечение — дочерний объект, исчезает вместе с кристаллом.
+            MakeShape(visual.transform, "Glow", glow, Vector2.zero, new Vector2(3.6f, 3.6f), PickupGlow, 29);
+            AddHint(visual.gameObject, "Воспоминание: подбери — Край отступит", new Vector2(0f, 0.9f), 4f, HintCold);
             var m = go.AddComponent<Memory>();
             Set(m, "squirrel", squirrel);
             Set(m, "zone", zone);
@@ -351,7 +355,8 @@ namespace SquirrelEditor
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root, false);
             MakeSprite(visual, "Body", new Vector2(0, 0.4f), new Vector2(1.2f, 0.8f), Moss, 60);
-            MakeSprite(visual, "Eye", new Vector2(0.4f, 0.55f), new Vector2(0.15f, 0.15f), new Color(0.95f, 0.9f, 0.3f), 61);
+            MakeShape(visual, "Eye", circle, new Vector2(0.4f, 0.55f), new Vector2(0.2f, 0.2f), DangerRed, 61);
+            AddSpikes(visual, 0.92f, 0.8f, 3, 59);
             var c = root.gameObject.AddComponent<Crawler>();
             SetVector(c, "hitSize", new Vector2(1.2f, 0.8f));
             SetVector(c, "hitOffset", new Vector2(0, 0.4f));
@@ -370,6 +375,8 @@ namespace SquirrelEditor
             wl.transform.localRotation = Quaternion.Euler(0, 0, 20);
             var wr = MakeSprite(visual, "Wing R", new Vector2(0.4f, 0.05f), new Vector2(0.5f, 0.4f), MothColor * 0.85f, 59);
             wr.transform.localRotation = Quaternion.Euler(0, 0, -20);
+            MakeShape(visual, "Eye L", circle, new Vector2(-0.1f, 0.12f), new Vector2(0.14f, 0.14f), DangerRed, 61);
+            MakeShape(visual, "Eye R", circle, new Vector2(0.1f, 0.12f), new Vector2(0.14f, 0.14f), DangerRed, 61);
             var m = root.gameObject.AddComponent<Moth>();
             SetVector(m, "hitSize", new Vector2(0.9f, 0.6f));
             SetVector(m, "hitOffset", Vector2.zero);
@@ -384,7 +391,11 @@ namespace SquirrelEditor
             var visual = new GameObject("Visual").transform;
             visual.SetParent(root, false);
             MakeSprite(visual, "Stem", new Vector2(0, 0.35f), new Vector2(0.45f, 0.7f), new Color(0.9f, 0.88f, 0.75f), 60);
-            MakeSprite(visual, "Cap", new Vector2(0, 0.85f), new Vector2(1.2f, 0.5f), SpitterColor, 61);
+            MakeShape(visual, "Cap", circle, new Vector2(0, 0.85f), new Vector2(1.3f, 0.6f), SpitterColor, 61);
+            // Красные споры на шляпке — «стреляет».
+            MakeShape(visual, "Spot 1", circle, new Vector2(-0.3f, 0.95f), new Vector2(0.18f, 0.14f), DangerRed, 62);
+            MakeShape(visual, "Spot 2", circle, new Vector2(0.25f, 1.0f), new Vector2(0.14f, 0.12f), DangerRed, 62);
+            MakeShape(visual, "Spot 3", circle, new Vector2(0.02f, 0.78f), new Vector2(0.12f, 0.1f), DangerRed, 62);
             var sp = root.gameObject.AddComponent<Spitter>();
             SetVector(sp, "hitSize", new Vector2(1.1f, 1.1f));
             SetVector(sp, "hitOffset", new Vector2(0, 0.55f));
@@ -413,7 +424,16 @@ namespace SquirrelEditor
         {
             var go = new GameObject(name);
             go.transform.position = pos;
-            var marker = MakeSprite(go.transform, "Marker", new Vector2(0, 0.15f), new Vector2(1.6f, 0.3f), new Color(0.55f, 0.42f, 0.3f), 5);
+            // Гнездо — чаша из веток с тёплым светом над ней: безопасное место.
+            MakeShape(go.transform, "Warm Light", glow, new Vector2(0, 0.6f), new Vector2(3.4f, 2.4f), SafeWarm, 3);
+            var marker = MakeShape(go.transform, "Marker", circle, new Vector2(0, 0.18f), new Vector2(1.8f, 0.7f), new Color(0.55f, 0.42f, 0.3f), 5);
+            MakeShape(go.transform, "Hollow", circle, new Vector2(0, 0.3f), new Vector2(1.3f, 0.35f), new Color(0.22f, 0.16f, 0.12f), 6);
+            for (int i = 0; i < 3; i++)
+            {
+                var twig = MakeSprite(go.transform, $"Twig {i + 1}", new Vector2(-0.6f + i * 0.6f, 0.42f), new Vector2(0.5f, 0.07f), new Color(0.42f, 0.3f, 0.2f), 7);
+                twig.transform.localRotation = Quaternion.Euler(0, 0, i == 1 ? -8f : (i == 0 ? 25f : -25f));
+            }
+            AddHint(go, "Гнездо: отдых и сохранение. Пока ты здесь, Край стоит", new Vector2(0f, 1.6f), 3.5f, HintWarm);
             var nest = go.AddComponent<Nest>();
             Set(nest, "squirrel", squirrel);
             Set(nest, "zone", zone);
@@ -426,12 +446,24 @@ namespace SquirrelEditor
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
             go.transform.position = new Vector3(x, y);
-            go.transform.localScale = new Vector3(w, h, 1);
             var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = white;
             sr.color = color;
             sr.sharedMaterial = unlit;
-            go.AddComponent<BoxCollider2D>();
+            if (color == Bark && barkSprite != null)
+            {
+                // Кора — с бороздами, плиткой: сразу видно, что по ней можно лезть.
+                sr.sprite = barkSprite;
+                sr.drawMode = SpriteDrawMode.Tiled;
+                sr.size = new Vector2(w, h);
+                sr.color = Color.Lerp(Bark, Color.white, 0.12f);
+                go.AddComponent<BoxCollider2D>().size = new Vector2(w, h);
+            }
+            else
+            {
+                go.transform.localScale = new Vector3(w, h, 1);
+                sr.sprite = white;
+                go.AddComponent<BoxCollider2D>();
+            }
             if (color == Bark) go.AddComponent<BarkSurface>(); // по коре можно лазать
             go.isStatic = true;
         }

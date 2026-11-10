@@ -13,6 +13,7 @@ namespace Squirrel.World
         public float timeLeft;
         public float baseRadius;
         public float pushedBack;
+        public float[] fronts = new float[0];
     }
 
     /// <summary>Снимок прогресса. Версия формата — с первого дня, чтобы старые сохранения не ломали игру.</summary>

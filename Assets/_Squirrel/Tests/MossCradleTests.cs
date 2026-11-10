@@ -203,11 +203,13 @@ namespace Squirrel.Tests
             yield return Frames(2);
             Assert.AreEqual(1, zone.Phase);
 
+            zone.DebugSetFront(0, 10f);
             var nest = Named<Nest>("(R3)");
             Place(nest.SpawnPoint);
             yield return Frames(3);
             Assert.IsTrue(SaveSystem.Exists(session.Slot), "в гнезде игра сохранилась");
             float pushed = zone.PushedBack;
+            float front0 = zone.FrontRadius(0);
             Assert.Greater(pushed, 0f);
 
             // Перезапуск сцены — как выход из игры и вход снова.
@@ -222,7 +224,87 @@ namespace Squirrel.Tests
             Assert.IsTrue(SwitchFor(Caterpillar.HelpedFlag).Target.activeSelf, "мост на месте");
             Assert.AreEqual(1, zone.Phase, "фаза Края");
             Assert.AreEqual(pushed, zone.PushedBack, 0.001f, "отталкивание Края");
+            Assert.AreEqual(front0, zone.FrontRadius(0), 0.05f, "очаг Края");
             Assert.IsTrue(Object.FindAnyObjectByType<AbilityPickup>().Taken);
+        }
+
+        int FrontNear(Vector2 p)
+        {
+            int best = -1; float bd = float.MaxValue;
+            for (int i = 0; i < zone.Field.FrontCount; i++)
+            {
+                float d = Vector2.Distance(zone.Field.Sources[i], p);
+                if (d < bd) { bd = d; best = i; }
+            }
+            return best;
+        }
+
+        [UnityTest]
+        public IEnumerator Edge_Measures_Distance_Along_Passages()
+        {
+            yield return null;
+            Assert.IsTrue(zone.Field != null && zone.Field.Ready, "у локации есть поле Края");
+            Assert.AreEqual(5, zone.FrontCount, "очагов Края");
+            Vector2 heart = Object.FindAnyObjectByType<Heart>().transform.position;
+            // Верхние кроны (R14) по прямой рядом с Сердцем, но за стеной: идти до них далеко.
+            Vector2 crowns = Named<Memory>("(R14)").transform.position;
+            Assert.Greater(zone.DistanceToCenter(crowns), Vector2.Distance(crowns, heart) * 2f, "расстояние меряется по проходам");
+            // В начале весь мир внутри Края.
+            foreach (var m in Object.FindObjectsByType<Memory>())
+                Assert.Greater(zone.SignedDistanceInside(m.transform.position), 0f, m.name + " внутри");
+            Assert.Greater(zone.SignedDistanceInside(squirrel.transform.position), 0f, "белка внутри");
+        }
+
+        [UnityTest]
+        public IEnumerator Front_Grows_Only_Near_The_Squirrel()
+        {
+            int near = FrontNear(new Vector2(2.5f, 51.5f));   // Дупло (R15)
+            int far = FrontNear(new Vector2(157.5f, 69.5f));  // Зал плевунов (R10)
+            Place(new Vector2(5.5f, 37.05f));                  // пол Дупла
+            yield return WaitSeconds(0.3f);
+            float n0 = zone.FrontRadius(near), f0 = zone.FrontRadius(far);
+            yield return WaitSeconds(1.5f);
+            Assert.IsTrue(zone.IsFrontPressing(near), "ближний очаг давит");
+            Assert.Greater(zone.FrontRadius(near), n0 + 0.4f, "ближний очаг расползается");
+            Assert.IsFalse(zone.IsFrontPressing(far), "дальний очаг спит");
+            Assert.AreEqual(f0, zone.FrontRadius(far), 0.001f, "дальний очаг стоит на месте");
+
+            // В гнезде очаги замирают.
+            var nest = Named<Nest>("(R3)");
+            Place(nest.SpawnPoint);
+            yield return Frames(3);
+            float all0 = 0f;
+            for (int i = 0; i < zone.FrontCount; i++) all0 += zone.FrontRadius(i);
+            yield return WaitSeconds(0.5f);
+            float all1 = 0f;
+            for (int i = 0; i < zone.FrontCount; i++) all1 += zone.FrontRadius(i);
+            Assert.AreEqual(all0, all1, 0.001f, "в гнезде Край стоит");
+        }
+
+        [UnityTest]
+        public IEnumerator Fronts_Never_Swallow_Heart_Or_Nests()
+        {
+            yield return null;
+            for (int i = 0; i < zone.FrontCount; i++) zone.DebugSetFront(i, 10000f);
+            var s = zone.Settings;
+            Vector2 heart = Object.FindAnyObjectByType<Heart>().transform.position;
+            Assert.GreaterOrEqual(zone.SignedDistanceInside(heart), s.frontHeartSafe - 0.5f, "у Сердца всегда есть место");
+            foreach (var nest in Object.FindObjectsByType<Nest>())
+                Assert.GreaterOrEqual(zone.SignedDistanceInside((Vector2)nest.transform.position + Vector2.up * 0.5f),
+                    s.frontNestSafe - 0.5f, nest.name + " остаётся укрытием");
+        }
+
+        [UnityTest]
+        public IEnumerator Memory_Pushes_Nearest_Front_Back()
+        {
+            int near = FrontNear(new Vector2(2.5f, 51.5f));
+            zone.DebugSetFront(near, 8f);
+            var memory = Named<Memory>("(R15)");
+            Place((Vector2)memory.transform.position - new Vector2(0f, 0.35f));
+            yield return Frames(3);
+            Assert.IsTrue(memory.Collected);
+            yield return WaitSeconds(2f);
+            Assert.Less(zone.FrontRadius(near), 5f, "очаг в Дупле отступил");
         }
 
         [UnityTest]

@@ -44,6 +44,24 @@ namespace Squirrel.Edge
         [Tooltip("Неуязвимость к Краю после возврата в гнездо, с")]
         public float respawnGrace = 2f;
 
+        [Header("Очаги Края (только в локации с EdgeField)")]
+        [Tooltip("Размер очага в начале, ед")]
+        public float frontStartRadius = 3f;
+        [Tooltip("Скорость, с которой очаг расползается по проходам в 1-й фазе, ед/с")]
+        public float frontSpeed = 0.45f;
+        [Tooltip("Во сколько раз очаги быстрее в каждой следующей фазе")]
+        public float frontEscalation = 1.35f;
+        [Tooltip("Очаг давит, только если белка ближе стольких единиц (по пути) к его границе")]
+        public float frontAwareness = 22f;
+        [Tooltip("Ближе стольких единиц к Сердцу очаги не подходят")]
+        public float frontHeartSafe = 14f;
+        [Tooltip("Ближе стольких единиц к гнезду очаги не подходят")]
+        public float frontNestSafe = 6f;
+        [Tooltip("На сколько отступают все очаги при провале глубже в сон")]
+        public float frontRollback = 12f;
+        [Tooltip("Воспоминание отталкивает ближайший очаг на (отталкивание × это)")]
+        public float frontPushMultiplier = 1.5f;
+
         public float HoldTime(int phase) => firstHoldTime * Mathf.Pow(escalation, phase);
         public float ShrinkTime(int phase) => firstShrinkTime * Mathf.Pow(shrinkEscalation, phase);
 
