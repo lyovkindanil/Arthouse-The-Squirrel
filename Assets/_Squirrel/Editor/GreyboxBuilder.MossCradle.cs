@@ -174,6 +174,10 @@ namespace SquirrelEditor
                 }, Vector3.zero);
             }
 
+            // --- Босс: Корневой сторож в зале Сердца (R12) ---
+            var warden = MakeRootWarden(rooms, enemiesRoot);
+            if (warden != null) Set(heart, "guard", warden);
+
             if (caterpillar != null)
             {
                 Set(caterpillar, "rock", rock);
@@ -203,6 +207,66 @@ namespace SquirrelEditor
             var a = go.AddComponent<AbilityPickup>();
             Set(a, "visual", v.transform);
             AddHint(v.gameObject, "Святилище: научишься отталкиваться от каменных стен", new Vector2(0f, 1.1f), 4.5f, new Color(0.75f, 1f, 0.8f));
+        }
+
+        /// <summary>
+        /// Корневой сторож сидит в левой стене зала Сердца. Арена — весь зал, ворота — в проходе справа.
+        /// </summary>
+        static global::Squirrel.Enemies.RootWarden MakeRootWarden(List<RoomDef> rooms, Transform parent)
+        {
+            var r12 = rooms.Find(r => r.id == "R12");
+            if (r12.id == null) return null;
+            float floor = r12.y + 2;                     // пол зала (ноги белки)
+            var arena = new Rect(r12.x + 1, floor, r12.w - 4, r12.h - 4); // правый край на шаг от ворот
+
+            var root = new GameObject("Boss: Root Warden (Корневой сторож)");
+            root.transform.SetParent(parent, false);
+            root.transform.position = new Vector3(r12.x + 3f, floor);
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(root.transform, false);
+            var trunk = new Color(0.32f, 0.22f, 0.16f);
+            MakeSprite(visual, "Trunk", new Vector2(0, 3.5f), new Vector2(4f, 7f), trunk, 55);
+            MakeShape(visual, "Crown", circle, new Vector2(0.3f, 7.2f), new Vector2(5f, 2.6f), new Color(0.25f, 0.4f, 0.22f), 54);
+            for (int i = 0; i < 4; i++)
+            {
+                var rootSpr = MakeSprite(visual, $"Root {i + 1}", new Vector2(1.6f + i * 0.5f, 0.3f + i * 0.9f), new Vector2(1.6f, 0.35f), trunk * 0.85f, 56);
+                rootSpr.transform.localRotation = Quaternion.Euler(0, 0, -25f + i * 18f);
+            }
+            MakeShape(visual, "Eye L", circle, new Vector2(-0.7f, 5.4f), new Vector2(0.45f, 0.3f), DangerRed, 58);
+            MakeShape(visual, "Eye R", circle, new Vector2(0.9f, 5.4f), new Vector2(0.45f, 0.3f), DangerRed, 58);
+            MakeShape(visual, "Core Glow", glow, new Vector2(0.2f, 3.2f), new Vector2(3.2f, 3.2f), new Color(1f, 0.7f, 0.3f, 0.25f), 56);
+            var core = MakeShape(visual, "Core", circle, new Vector2(0.2f, 3.2f), new Vector2(1.4f, 1.4f), new Color(0.3f, 0.2f, 0.15f), 57);
+
+            // Ворота: корни перекрывают выход, пока идёт бой.
+            var gate = new GameObject("Boss Gate");
+            gate.transform.SetParent(root.transform, false);
+            gate.transform.position = new Vector3(r12.x + r12.w - 1f, floor + 1.5f);
+            var gsr = gate.AddComponent<SpriteRenderer>();
+            gsr.sprite = white; gsr.sharedMaterial = unlit; gsr.sortingOrder = 40;
+            gsr.color = new Color(0.4f, 0.27f, 0.18f);
+            gate.transform.localScale = new Vector3(2f, 3f, 1f);
+            gate.AddComponent<BoxCollider2D>();
+            for (int i = 0; i < 3; i++)
+            {
+                var bar = MakeShape(gate.transform, $"Thorn {i + 1}", triangle, new Vector2(-0.5f, -0.3f + i * 0.3f), new Vector2(0.2f, 0.1f), DangerRed, 41);
+                bar.transform.localRotation = Quaternion.Euler(0, 0, 90);
+            }
+
+            var w = root.AddComponent<global::Squirrel.Enemies.RootWarden>();
+            SetVector(w, "hitSize", new Vector2(4f, 7f));
+            SetVector(w, "hitOffset", new Vector2(0f, 3.5f));
+            SetInt(w, "maxHp", 24);
+            SetInt(w, "contactDamage", 1);
+            SetFloat(w, "floorY", floor);
+            var so = new SerializedObject(w);
+            so.FindProperty("arena").rectValue = arena;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            Set(w, "gate", gate);
+            Set(w, "core", core);
+            Set(w, "sprite", white);
+            Set(w, "material", unlit);
+            AddHint(root, "Корневой сторож. Бей, когда сердцевина светится", new Vector2(2f, 8.6f), 14f, HintDanger);
+            return w;
         }
 
         /// <summary>Очаг Края: тёмно-оранжевое кольцо, чтобы было видно, откуда ползёт.</summary>

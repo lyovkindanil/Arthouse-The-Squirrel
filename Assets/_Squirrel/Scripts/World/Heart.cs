@@ -11,6 +11,13 @@ namespace Squirrel.World
         [SerializeField] Transform squirrel;
         [SerializeField] EdgeZone zone;
         [SerializeField] Transform visual;
+        [Tooltip("Страж Сердца: пока он жив, Сердце не восстановить")]
+        [SerializeField] global::Squirrel.Enemies.Enemy guard;
+        [SerializeField] string lockedHint = "Сердце колыбели. Его стережёт Корневой сторож";
+        [SerializeField] string openHint = "Сердце колыбели: коснись — Край остановится";
+
+        WorldHint hint;
+        public bool Locked => guard != null && !guard.IsDead;
 
         public const string RestoredFlag = "heart.restored";
 
@@ -25,6 +32,7 @@ namespace Squirrel.World
                 if (c != null) squirrel = c.transform;
             }
             if (zone == null) zone = FindAnyObjectByType<EdgeZone>();
+            hint = GetComponent<WorldHint>();
         }
 
         void Start()
@@ -43,7 +51,8 @@ namespace Squirrel.World
                 visual.Rotate(0f, 0f, (Restored ? 20f : 60f) * Time.deltaTime);
             }
 
-            if (Restored || squirrel == null || zone == null) return;
+            if (hint != null) hint.Text = Restored ? "" : Locked ? lockedHint : openHint;
+            if (Restored || Locked || squirrel == null || zone == null) return;
             if (Vector2.Distance(squirrel.position, transform.position) <= radius)
             {
                 Restored = true;
