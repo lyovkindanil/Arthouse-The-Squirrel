@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 07c4f4388e4cb734f994512ad453431b, type: 3}
   m_Name: EdgeSettings_MossCradle
   m_EditorClassIdentifier: Squirrel.Runtime::Squirrel.Edge.EdgeSettings
-  startRadius: 105
+  startRadius: 296
   finalRadius: 8
   phaseCount: 4
   firstHoldTime: 420
@@ -27,3 +27,11 @@ MonoBehaviour:
   regenPerSecond: 0.5
   regenDelay: 2
   respawnGrace: 2
+  frontStartRadius: 3
+  frontSpeed: 0.45
+  frontEscalation: 1.35
+  frontAwareness: 22
+  frontHeartSafe: 14
+  frontNestSafe: 6
+  frontRollback: 12
+  frontPushMultiplier: 1.5
