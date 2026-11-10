@@ -177,6 +177,49 @@ namespace Squirrel.Edge
             PushedBackBy?.Invoke(amount);
         }
 
+        /// <summary>Снимок для сохранения.</summary>
+        public Squirrel.World.EdgeSnapshot Capture() => new Squirrel.World.EdgeSnapshot
+        {
+            phase = Phase,
+            stage = (int)Stage,
+            timeLeft = float.IsInfinity(StageTimeLeft) ? -1f : StageTimeLeft,
+            baseRadius = baseRadius,
+            pushedBack = bonusTarget,
+        };
+
+        /// <summary>Восстановить Край из сохранения. Во время схлопывания начинает финал сначала.</summary>
+        public void Restore(Squirrel.World.EdgeSnapshot s)
+        {
+            if (s == null) return;
+            bonus = bonusTarget = Mathf.Max(0f, s.pushedBack);
+            int phase = Mathf.Clamp(s.phase, 0, settings.phaseCount);
+            switch ((EdgeStage)s.stage)
+            {
+                case EdgeStage.Stabilized:
+                    Phase = phase;
+                    baseRadius = s.baseRadius;
+                    Stage = EdgeStage.Stabilized;
+                    break;
+                case EdgeStage.Shrink when phase < settings.phaseCount:
+                    Phase = phase;
+                    Stage = EdgeStage.Shrink;
+                    shrinkFrom = settings.RadiusAt(phase);
+                    shrinkTo = settings.RadiusAt(phase + 1);
+                    SetTimer(settings.ShrinkTime(phase));
+                    StageTimeLeft = Mathf.Clamp(s.timeLeft, 0f, StageDuration);
+                    baseRadius = Mathf.Lerp(shrinkFrom, shrinkTo, Ease(1f - StageTimeLeft / StageDuration));
+                    break;
+                case EdgeStage.Collapse:
+                    EnterHold(settings.phaseCount);
+                    break;
+                default:
+                    EnterHold(phase);
+                    if (s.timeLeft >= 0f && !float.IsInfinity(StageDuration))
+                        StageTimeLeft = Mathf.Clamp(s.timeLeft, 0f, StageDuration);
+                    break;
+            }
+        }
+
         /// <summary>Сердце восстановлено: Край замирает там, где был.</summary>
         public void Stabilize()
         {

@@ -17,7 +17,7 @@ namespace SquirrelEditor
     /// Arena.unity — арена с врагами всех трёх типов и манекеном для отработки ударов.
     /// Повторный запуск пересоздаёт сцены, но не трогает настройки (ScriptableObject'ы).
     /// </summary>
-    public static class GreyboxBuilder
+    public static partial class GreyboxBuilder
     {
         const string Root = "Assets/_Squirrel";
         const string Generated = Root + "/Generated";
@@ -41,13 +41,14 @@ namespace SquirrelEditor
         static EdgeSettings edgeSettings;
         static CombatSettings combatSettings;
 
-        [MenuItem("Squirrel/Собрать всё (комната + арена)")]
+        [MenuItem("Squirrel/Собрать всё (комната, арена, Мшистая колыбель)")]
         public static void BuildAll()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
             BuildGreyboxScene();
             BuildArenaScene();
-            EditorSceneManager.OpenScene(ScenePath);
+            BuildMossCradleScene();
+            EditorSceneManager.OpenScene(MossCradlePath);
         }
 
         static void Prepare()
@@ -217,7 +218,7 @@ namespace SquirrelEditor
             public Respawner respawner;
         }
 
-        static SquirrelRig BuildSquirrel(Vector3 position, EdgeZone zone)
+        static SquirrelRig BuildSquirrel(Vector3 position, EdgeZone zone, bool allAbilities = true)
         {
             var sq = new GameObject("Squirrel");
             sq.transform.position = position;
@@ -227,6 +228,9 @@ namespace SquirrelEditor
             box.isTrigger = true;
             sq.AddComponent<SquirrelInput>();
             sq.AddComponent<SquirrelMotor>();
+            var abilities = sq.AddComponent<SquirrelAbilities>();
+            SetBool(abilities, "startWithWallJump", allAbilities);
+            sq.AddComponent<RoomTracker>();
             var controller = sq.AddComponent<SquirrelController>();
             var body = new GameObject("Visual").transform;
             body.SetParent(sq.transform, false);
@@ -286,7 +290,7 @@ namespace SquirrelEditor
             Set(hud, "respawner", rig.respawner);
         }
 
-        static void MakeMemory(string name, Vector3 pos, Transform squirrel, EdgeZone zone)
+        static Memory MakeMemory(string name, Vector3 pos, Transform squirrel, EdgeZone zone)
         {
             var go = new GameObject(name);
             go.transform.position = pos;
@@ -296,6 +300,7 @@ namespace SquirrelEditor
             Set(m, "squirrel", squirrel);
             Set(m, "zone", zone);
             Set(m, "visual", visual.transform);
+            return m;
         }
 
         static Transform EnemyRoot(string name, Vector3 pos)
@@ -312,6 +317,27 @@ namespace SquirrelEditor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        static void SetBool(Object target, string field, bool value)
+        {
+            var so = new SerializedObject(target);
+            so.FindProperty(field).boolValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void SetFloat(Object target, string field, float value)
+        {
+            var so = new SerializedObject(target);
+            so.FindProperty(field).floatValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void SetString(Object target, string field, string value)
+        {
+            var so = new SerializedObject(target);
+            so.FindProperty(field).stringValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         static void SetInt(Object target, string field, int value)
         {
             var so = new SerializedObject(target);
@@ -319,7 +345,7 @@ namespace SquirrelEditor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        static void MakeCrawler(string name, Vector3 pos, int dir)
+        static Transform MakeCrawler(string name, Vector3 pos, int dir)
         {
             var root = EnemyRoot(name, pos);
             var visual = new GameObject("Visual").transform;
@@ -331,9 +357,10 @@ namespace SquirrelEditor
             SetVector(c, "hitOffset", new Vector2(0, 0.4f));
             SetInt(c, "startDirection", dir);
             Set(c, "visual", visual);
+            return root;
         }
 
-        static void MakeMoth(string name, Vector3 pos)
+        static Transform MakeMoth(string name, Vector3 pos)
         {
             var root = EnemyRoot(name, pos);
             var visual = new GameObject("Visual").transform;
@@ -348,9 +375,10 @@ namespace SquirrelEditor
             SetVector(m, "hitOffset", Vector2.zero);
             SetInt(m, "maxHp", 2);
             Set(m, "visual", visual);
+            return root;
         }
 
-        static void MakeSpitter(string name, Vector3 pos)
+        static Transform MakeSpitter(string name, Vector3 pos)
         {
             var root = EnemyRoot(name, pos);
             var visual = new GameObject("Visual").transform;
@@ -363,9 +391,10 @@ namespace SquirrelEditor
             Set(sp, "visual", visual);
             Set(sp, "shotSprite", white);
             Set(sp, "shotMaterial", unlit);
+            return root;
         }
 
-        static void MakeDummy(string name, Vector3 pos)
+        static Transform MakeDummy(string name, Vector3 pos)
         {
             var root = EnemyRoot(name, pos);
             var visual = new GameObject("Visual").transform;
@@ -377,9 +406,10 @@ namespace SquirrelEditor
             SetInt(d, "maxHp", 99);
             SetInt(d, "contactDamage", 0);
             Set(d, "visual", visual);
+            return root;
         }
 
-        static void MakeNest(string name, Vector3 pos, Transform squirrel, EdgeZone zone)
+        static Nest MakeNest(string name, Vector3 pos, Transform squirrel, EdgeZone zone)
         {
             var go = new GameObject(name);
             go.transform.position = pos;
@@ -388,6 +418,7 @@ namespace SquirrelEditor
             Set(nest, "squirrel", squirrel);
             Set(nest, "zone", zone);
             Set(nest, "marker", marker);
+            return nest;
         }
 
         static void Block(Transform parent, string name, float x, float y, float w, float h, Color color)
@@ -401,6 +432,7 @@ namespace SquirrelEditor
             sr.color = color;
             sr.sharedMaterial = unlit;
             go.AddComponent<BoxCollider2D>();
+            if (color == Bark) go.AddComponent<BarkSurface>(); // по коре можно лазать
             go.isStatic = true;
         }
 

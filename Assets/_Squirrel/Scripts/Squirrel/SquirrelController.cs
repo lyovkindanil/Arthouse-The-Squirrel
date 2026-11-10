@@ -8,7 +8,7 @@ namespace Squirrel
     /// Конечный автомат белки: на земле, в воздухе, на стене.
     /// Все числа — в SquirrelSettings.
     /// </summary>
-    [RequireComponent(typeof(SquirrelMotor), typeof(SquirrelInput))]
+    [RequireComponent(typeof(SquirrelMotor), typeof(SquirrelInput), typeof(SquirrelAbilities))]
     public class SquirrelController : MonoBehaviour
     {
         [SerializeField] SquirrelSettings settings;
@@ -17,6 +17,8 @@ namespace Squirrel
 
         SquirrelMotor motor;
         SquirrelInput input;
+        SquirrelAbilities abilities;
+        bool wallIsBark;
 
         Vector2 velocity;
         float coyoteTimer, jumpBufferTimer, wallCoyoteTimer, inputLockTimer, wallUnstickTimer;
@@ -37,6 +39,7 @@ namespace Squirrel
         {
             motor = GetComponent<SquirrelMotor>();
             input = GetComponent<SquirrelInput>();
+            abilities = GetComponent<SquirrelAbilities>();
             if (visual != null) visualBaseScale = visual.localScale;
             if (settings == null)
             {
@@ -62,10 +65,13 @@ namespace Squirrel
             // --- Сенсоры ---
             bool grounded = velocity.y <= 0.01f && motor.Probe(Vector2.down);
             wallDir = 0;
+            wallIsBark = false;
             if (!grounded)
             {
-                if (motor.Probe(Vector2.right)) wallDir = 1;
-                else if (motor.Probe(Vector2.left)) wallDir = -1;
+                if (motor.Probe(Vector2.right, out var wr)) { wallDir = 1; wallIsBark = BarkSurface.Is(wr); }
+                else if (motor.Probe(Vector2.left, out var wl)) { wallDir = -1; wallIsBark = BarkSurface.Is(wl); }
+                // За кору можно держаться всегда, за камень — только освоив отталкивание.
+                if (wallDir != 0 && !wallIsBark && !abilities.WallJump) wallDir = 0;
             }
 
             // --- Переходы состояний ---
@@ -118,7 +124,7 @@ namespace Squirrel
                     break;
 
                 case SquirrelState.OnWall:
-                    if (move.y > 0f && s.wallClimbSpeed > 0f)
+                    if (move.y > 0f && s.wallClimbSpeed > 0f && wallIsBark)
                         velocity.y = s.wallClimbSpeed;
                     else if (move.y < 0f)
                         velocity.y = -s.wallFastSlideSpeed;
@@ -134,7 +140,7 @@ namespace Squirrel
                     else if (velocity.y < 0f) g *= s.fallGravityMultiplier;
                     velocity.y -= g * dt;
 
-                    if (s.glideUnlocked && velocity.y < 0f && input.JumpHeld && !isJumping)
+                    if (abilities.Glide && velocity.y < 0f && input.JumpHeld && !isJumping)
                     {
                         velocity.y = Mathf.Max(velocity.y, -s.glideFallSpeed);
                         IsGliding = true;
@@ -151,7 +157,7 @@ namespace Squirrel
                 {
                     DoJump(s.JumpVelocity);
                 }
-                else if (s.wallJumpUnlocked && (State == SquirrelState.OnWall || wallCoyoteTimer > 0f))
+                else if (abilities.WallJump && (State == SquirrelState.OnWall || wallCoyoteTimer > 0f))
                 {
                     int dir = State == SquirrelState.OnWall ? wallDir : lastWallDir;
                     velocity.x = -dir * s.wallJumpHorizontalSpeed;

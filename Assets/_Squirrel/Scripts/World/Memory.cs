@@ -34,6 +34,14 @@ namespace Squirrel.World
             if (visual != null) visualBase = visual.localPosition;
         }
 
+        public string Flag => "memory." + name;
+
+        void Start()
+        {
+            // Уже собрано в сохранении: Край помнит отталкивание сам, здесь только прячем.
+            if (WorldState.HasFlag(Flag)) { Collected = true; if (visual != null) visual.gameObject.SetActive(false); }
+        }
+
         void Update()
         {
             if (Collected) return;
@@ -53,6 +61,8 @@ namespace Squirrel.World
             Collected = true;
             if (zone != null) zone.PushBack(pushBack);
             if (visual != null) visual.gameObject.SetActive(false);
+            WorldState.SetFlag(Flag);
+            Toast.Show("Воспоминание. Край отступил.");
             AnyCollected?.Invoke(this);
             Debug.Log($"Воспоминание: Край отступил на {pushBack}.");
         }

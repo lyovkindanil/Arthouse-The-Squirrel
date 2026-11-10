@@ -25,7 +25,9 @@ namespace Squirrel.Combat
 
         public CombatSettings Settings => settings;
         public float Current { get; private set; }
-        public int Max => settings.maxSeeds;
+        public int Max => settings.maxSeeds + BonusSeeds;
+        /// <summary>Лишние зёрна сверх базовых (например, взятый запас гусеницы).</summary>
+        public int BonusSeeds { get; private set; }
         public int Sap { get; private set; }
         public bool IsDead { get; private set; }
         public bool IsInvulnerable => invulnTimer > 0f;
@@ -132,6 +134,18 @@ namespace Squirrel.Combat
             if (IsDead || amount <= 0f) return;
             float cap = Mathf.Min(Max, Mathf.Ceil(Current - 0.001f));
             if (Current < cap) Current = Mathf.Min(cap, Current + amount);
+        }
+
+        public void AddMaxSeeds(int amount)
+        {
+            BonusSeeds = Mathf.Max(0, BonusSeeds + amount);
+            Current = Mathf.Clamp(Current + amount, 0.01f, Max);
+        }
+
+        public void SetBonusSeeds(int amount)
+        {
+            BonusSeeds = Mathf.Max(0, amount);
+            Current = Mathf.Min(Current, Max);
         }
 
         public void AddSap(int amount) => Sap = Mathf.Clamp(Sap + amount, 0, settings.maxSap);

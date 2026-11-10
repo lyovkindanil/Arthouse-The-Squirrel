@@ -44,6 +44,13 @@ namespace Squirrel.World
             health.Died += OnDied;
         }
 
+        /// <summary>Загрузка сохранения.</summary>
+        public void RestoreCounters(int sleepDepth, int deaths)
+        {
+            SleepDepth = Mathf.Max(0, sleepDepth);
+            Deaths = Mathf.Max(0, deaths);
+        }
+
         void OnDestroy()
         {
             if (health != null) health.Died -= OnDied;

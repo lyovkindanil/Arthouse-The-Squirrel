@@ -9,7 +9,7 @@ namespace Squirrel.World
     /// <summary>
     /// Отладочный HUD на OnGUI (без настройки Canvas). В срезе заменим на UI Toolkit.
     /// Клавиши: R — перезапуск, F1 — перемотать стадию Края, F2 — вкл/выкл планирование,
-    /// F3 — вкл/выкл отталкивание от стен, F4 — полный сок, H — скрыть подсказки.
+    /// F3 — вкл/выкл отталкивание от стен, F4 — полный сок, F8 — стереть сохранение и начать заново, H — скрыть подсказки.
     /// </summary>
     public class PrototypeHUD : MonoBehaviour
     {
@@ -19,6 +19,11 @@ namespace Squirrel.World
         [SerializeField] SquirrelHealth health;
         [SerializeField] AcornThrower thrower;
         [SerializeField] Respawner respawner;
+        SquirrelAbilities abilities;
+        RoomTracker rooms;
+        GameSession session;
+        GUIStyle center, corner;
+        float roomFlash;
 
         bool showHelp = true;
         GUIStyle big, small;
@@ -32,6 +37,10 @@ namespace Squirrel.World
             if (health == null && squirrel != null) health = squirrel.GetComponent<SquirrelHealth>();
             if (thrower == null && squirrel != null) thrower = squirrel.GetComponent<AcornThrower>();
             if (respawner == null && squirrel != null) respawner = squirrel.GetComponent<Respawner>();
+            if (squirrel != null) abilities = squirrel.GetComponent<SquirrelAbilities>();
+            if (squirrel != null) rooms = squirrel.GetComponent<RoomTracker>();
+            if (rooms != null) rooms.Entered += _ => roomFlash = 2.5f;
+            session = FindAnyObjectByType<GameSession>();
             if (health != null) health.Damaged += _ => hurtFlash = 1f;
         }
 
@@ -42,10 +51,12 @@ namespace Squirrel.World
             if (kb.rKey.wasPressedThisFrame) SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex >= 0
                 ? SceneManager.GetActiveScene().buildIndex : 0);
             if (kb.f1Key.wasPressedThisFrame && zone != null) zone.DebugSkipStage();
-            if (kb.f2Key.wasPressedThisFrame && squirrel != null) squirrel.Settings.glideUnlocked = !squirrel.Settings.glideUnlocked;
-            if (kb.f3Key.wasPressedThisFrame && squirrel != null) squirrel.Settings.wallJumpUnlocked = !squirrel.Settings.wallJumpUnlocked;
+            if (kb.f2Key.wasPressedThisFrame && abilities != null) abilities.Set(Ability.Glide, !abilities.Glide);
+            if (kb.f3Key.wasPressedThisFrame && abilities != null) abilities.Set(Ability.WallJump, !abilities.WallJump);
             if (kb.f4Key.wasPressedThisFrame && health != null) health.AddSap(health.Settings.maxSap);
+            if (kb.f8Key.wasPressedThisFrame && session != null) session.WipeAndRestart();
             if (kb.hKey.wasPressedThisFrame) showHelp = !showHelp;
+            roomFlash -= Time.unscaledDeltaTime;
 
             bool outside = exposure != null && exposure.IsOutside;
             outsideFlash = Mathf.MoveTowards(outsideFlash, outside ? 1f : 0f, Time.deltaTime * 3f);
@@ -58,6 +69,26 @@ namespace Squirrel.World
             {
                 big = new GUIStyle(GUI.skin.label) { fontSize = 22, fontStyle = FontStyle.Bold };
                 small = new GUIStyle(GUI.skin.label) { fontSize = 15 };
+                center = new GUIStyle(GUI.skin.label) { fontSize = 24, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter, wordWrap = true };
+                corner = new GUIStyle(GUI.skin.label) { fontSize = 18, alignment = TextAnchor.UpperRight };
+            }
+
+            if (Toast.Visible)
+            {
+                GUI.color = new Color(1f, 0.95f, 0.8f, Toast.Alpha);
+                GUI.Label(new Rect(Screen.width * 0.2f, Screen.height * 0.62f, Screen.width * 0.6f, 80), Toast.Text, center);
+                GUI.color = Color.white;
+            }
+
+            if (rooms != null && rooms.Current != null)
+            {
+                float a = roomFlash > 0f ? 1f : 0.55f;
+                GUI.color = new Color(1f, 1f, 1f, a);
+                string axes = "";
+                var w = WorldState.Current;
+                if (w != null && showHelp) axes = $"\nСон {w.Dream:+0;-0;0} · Сострадание {w.Compassion:+0;-0;0}";
+                GUI.Label(new Rect(Screen.width - 520, 12, 504, 80), rooms.Current.Title + axes, corner);
+                GUI.color = Color.white;
             }
 
             // Красная виньетка, когда белка за Краем или её ударили.
@@ -112,13 +143,13 @@ namespace Squirrel.World
 
             if (squirrel != null && showHelp)
             {
-                var st = squirrel.Settings;
+                bool glide = abilities != null && abilities.Glide, wj = abilities != null && abilities.WallJump;
                 GUILayout.Space(6);
                 GUILayout.Label($"Состояние: {squirrel.State}{(squirrel.IsGliding ? " (планирует)" : "")}   v = {squirrel.Velocity.x:0.0}, {squirrel.Velocity.y:0.0}", small);
                 GUILayout.Label("A/D, стрелки, стик — бег · Пробел/Z/A — прыжок (держать — выше)", small);
                 GUILayout.Label("К стене в воздухе — зацепиться · W/S на стене — лезть/скользить · прыжок на стене — оттолкнуться", small);
                 GUILayout.Label("X/J/□ — удар хвостом (+W — вверх, в воздухе +S — вниз с отскоком) · C/K/R1 — жёлудь · держать V/L/△ — лечение (3 сока)", small);
-                GUILayout.Label($"R — заново · F1 — перемотать стадию Края · F2 — планирование [{(st.glideUnlocked ? "вкл" : "выкл")}] · F3 — отталкивание [{(st.wallJumpUnlocked ? "вкл" : "выкл")}] · F4 — полный сок · H — скрыть", small);
+                GUILayout.Label($"R — заново · F1 — перемотать стадию Края · F2 — планирование [{(glide ? "вкл" : "выкл")}] · F3 — отталкивание [{(wj ? "вкл" : "выкл")}] · F4 — полный сок{(session != null ? " · F8 — стереть сохранение" : "")} · H — скрыть", small);
             }
             GUILayout.EndArea();
         }

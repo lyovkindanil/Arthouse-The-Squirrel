@@ -45,15 +45,13 @@ namespace Squirrel
         public float cornerCorrection = 0.25f;
 
         [Header("Стены (кора)")]
-        [Tooltip("Можно ли цепляться за стены")]
+        [Tooltip("Можно ли цепляться за стены. За кору — всегда, за камень — только с отталкиванием (SquirrelAbilities)")]
         public bool wallClingEnabled = true;
-        [Tooltip("Отталкивание от стен (по плану — способность 1-й локации)")]
-        public bool wallJumpUnlocked = true;
         [Tooltip("Медленное скольжение вниз по стене")]
         public float wallSlideSpeed = 2.5f;
         [Tooltip("Быстрое скольжение, если зажать «вниз»")]
         public float wallFastSlideSpeed = 8f;
-        [Tooltip("Лазание вверх по коре при зажатом «вверх». 0 — выключено")]
+        [Tooltip("Лазание вверх по коре при зажатом «вверх» (по камню лазать нельзя). 0 — выключено")]
         public float wallClimbSpeed = 4f;
         [Tooltip("Горизонтальная скорость отталкивания от стены")]
         public float wallJumpHorizontalSpeed = 9f;
@@ -66,8 +64,7 @@ namespace Squirrel
         [Tooltip("Coyote time для отталкивания от стены, с")]
         public float wallCoyoteTime = 0.1f;
 
-        [Header("Планирование на хвосте (способность 2-й локации)")]
-        public bool glideUnlocked = false;
+        [Header("Планирование на хвосте (способность 2-й локации, включается в SquirrelAbilities)")]
         [Tooltip("Скорость падения при планировании")]
         public float glideFallSpeed = 2.2f;
 

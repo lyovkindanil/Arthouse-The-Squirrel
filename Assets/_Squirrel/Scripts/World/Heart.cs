@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using Squirrel.Edge;
 
@@ -11,7 +12,10 @@ namespace Squirrel.World
         [SerializeField] EdgeZone zone;
         [SerializeField] Transform visual;
 
+        public const string RestoredFlag = "heart.restored";
+
         public bool Restored { get; private set; }
+        public static event Action<Heart> AnyRestored;
 
         void Awake()
         {
@@ -21,6 +25,12 @@ namespace Squirrel.World
                 if (c != null) squirrel = c.transform;
             }
             if (zone == null) zone = FindAnyObjectByType<EdgeZone>();
+        }
+
+        void Start()
+        {
+            // Сердце уже восстановлено в сохранении: Край восстановлен вместе с ним.
+            if (WorldState.HasFlag(RestoredFlag)) Restored = true;
         }
 
         void Update()
@@ -38,6 +48,9 @@ namespace Squirrel.World
             {
                 Restored = true;
                 zone.Stabilize();
+                WorldState.SetFlag(RestoredFlag);
+                Toast.Show("Сердце восстановлено. Край замер.");
+                AnyRestored?.Invoke(this);
                 Debug.Log("Сердце восстановлено: Край замер.");
             }
         }
