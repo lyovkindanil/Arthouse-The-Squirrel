@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 07c4f4388e4cb734f994512ad453431b, type: 3}
+  m_Name: EdgeSettings_MossCradle
+  m_EditorClassIdentifier: Squirrel.Runtime::Squirrel.Edge.EdgeSettings
+  startRadius: 105
+  finalRadius: 8
+  phaseCount: 4
+  firstHoldTime: 420
+  firstShrinkTime: 25
+  escalation: 0.65
+  shrinkEscalation: 0.75
+  warningTime: 8
+  collapseAfterLastPhase: 1
+  collapseHoldTime: 20
+  collapseTime: 30
+  drainPerSecond: 1.5
+  regenPerSecond: 0.5
+  regenDelay: 2
+  respawnGrace: 2
