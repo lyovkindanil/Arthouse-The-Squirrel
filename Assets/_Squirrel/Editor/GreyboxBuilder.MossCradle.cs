@@ -52,6 +52,8 @@ namespace SquirrelEditor
 
             ParseMap(File.ReadAllLines(MossCradleMap), out var rooms, out var cells, out int width, out int height);
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            // NewScene выгружает неиспользуемые ассеты — берём настройки заново, уже с диска.
+            edgeSettings = AssetDatabase.LoadAssetAtPath<EdgeSettings>(SettingsDir + "/EdgeSettings_MossCradle.asset");
 
             // --- Геометрия ---
             var level = new GameObject("Level").transform;
