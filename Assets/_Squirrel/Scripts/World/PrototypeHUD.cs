@@ -32,6 +32,7 @@ namespace Squirrel.World
         float frontNear;          // 0..1, насколько близко
         Vector2 frontDir;         // куда смотреть (в мире)
         static Texture2D vignette;
+        global::Squirrel.Enemies.RootWarden boss;
 
         void Awake()
         {
@@ -45,6 +46,7 @@ namespace Squirrel.World
             if (squirrel != null) rooms = squirrel.GetComponent<RoomTracker>();
             if (rooms != null) rooms.Entered += _ => roomFlash = 2.5f;
             session = FindAnyObjectByType<GameSession>();
+            boss = FindAnyObjectByType<global::Squirrel.Enemies.RootWarden>();
             if (health != null) health.Damaged += _ => hurtFlash = 1f;
         }
 
@@ -128,6 +130,19 @@ namespace Squirrel.World
             GUI.color = Color.white;
         }
 
+        void DrawBossBar()
+        {
+            if (boss == null || !boss.IsFighting) return;
+            float w = Screen.width * 0.5f, x = (Screen.width - w) * 0.5f, y = Screen.height - 58;
+            GUI.Label(new Rect(x, y - 30, w, 28), boss.Phase == 1 ? "Корневой сторож" : "Корневой сторож — ярость", hintStyle);
+            GUI.color = new Color(0f, 0f, 0f, 0.6f);
+            GUI.DrawTexture(new Rect(x, y, w, 14), Texture2D.whiteTexture);
+            float k = Mathf.Clamp01((float)boss.Hp / boss.MaxHp);
+            GUI.color = boss.IsExposed ? new Color(1f, 0.75f, 0.3f) : new Color(0.75f, 0.25f, 0.2f);
+            GUI.DrawTexture(new Rect(x + 2, y + 2, (w - 4) * k, 10), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+        }
+
         void DrawFrontWarning()
         {
             if (frontNear <= 0.01f) return;
@@ -168,6 +183,7 @@ namespace Squirrel.World
 
             DrawHints();
             DrawFrontWarning();
+            DrawBossBar();
 
             if (Toast.Visible)
             {
