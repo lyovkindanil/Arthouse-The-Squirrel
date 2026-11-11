@@ -210,7 +210,7 @@ namespace SquirrelEditor
         }
 
         /// <summary>
-        /// Корневой сторож сидит в левой стене зала Сердца. Арена — весь зал, ворота — в проходе справа.
+        /// Корневой сторож просыпается у левой стены зала Сердца и бродит по полу. Арена — весь зал, ворота — в проходе справа.
         /// </summary>
         static global::Squirrel.Enemies.RootWarden MakeRootWarden(List<RoomDef> rooms, Transform parent)
         {
@@ -239,7 +239,7 @@ namespace SquirrelEditor
 
             // Ворота: корни перекрывают выход, пока идёт бой.
             var gate = new GameObject("Boss Gate");
-            gate.transform.SetParent(root.transform, false);
+            gate.transform.SetParent(parent, false); // ворота стоят на месте, сторож ходит
             gate.transform.position = new Vector3(r12.x + r12.w - 1f, floor + 1.5f);
             var gsr = gate.AddComponent<SpriteRenderer>();
             gsr.sprite = white; gsr.sharedMaterial = unlit; gsr.sortingOrder = 40;

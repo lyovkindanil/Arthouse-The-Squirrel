@@ -4,13 +4,16 @@ using Squirrel.Combat;
 
 namespace Squirrel.Enemies
 {
-    public enum WardenState { Dormant, Waking, Idle, Telegraph, Attacking, Exposed, Enraging, Defeated }
+    public enum WardenState { Dormant, Waking, Idle, Telegraph, Attacking, Exposed, Enraging, Defeated, Burrowing, Tunneling, Emerging }
     public enum WardenAttack { RootSpikes, Sweep, SporeRain }
 
     /// <summary>
     /// Корневой сторож — босс Мшистой колыбели, охраняет Сердце.
-    /// Сидит в стене арены. Ранить его можно, только пока он раскрыт (после каждой атаки светится сердцевина).
-    /// Фаза 1: корни-шипы из пола под белкой (по одному) и низкий удар корнем по полу (перепрыгнуть).
+    /// Медленно бредёт по полу зала за белкой, держась на расстоянии, и разворачивается к ней.
+    /// Время от времени (и когда прижал белку к стене) зарывается и медленно ползёт под землёй
+    /// холмиком на другую сторону от белки, потом вырастает обратно (вырастая, ранит, если белка стоит на холмике).
+    /// Ранить его можно, только пока он раскрыт (после каждой атаки светится сердцевина); раскрытый стоит на месте.
+    /// Фаза 1: корни-шипы из пола под белкой (по одному) и низкий удар корнем по полу в обе стороны от сторожа (перепрыгнуть).
     /// Фаза 2 (с половины здоровья): всё быстрее, шипов больше, удар корнем дважды, сверху падают споры.
     /// Белка вошла на арену — ворота закрываются. Победа — ворота открываются, к Сердцу можно подойти.
     /// Белка погибла — бой начинается заново.
@@ -33,6 +36,22 @@ namespace Squirrel.Enemies
         [SerializeField] float enrageTime = 1.8f;
         [Tooltip("Во второй фазе всё быстрее во столько раз")]
         [SerializeField] float phaseTwoSpeed = 1.4f;
+
+        [Header("Перемещение")]
+        [Tooltip("Скорость шага по полу (ед./с). Во второй фазе умножается на phaseTwoSpeed")]
+        [SerializeField] float walkSpeed = 1.2f;
+        [Tooltip("Ближе этого (центр к центру по горизонтали) к белке сам не подходит")]
+        [SerializeField] float keepDistance = 5f;
+        [Tooltip("Зарывается после стольких раскрытий (в фазе 2 — на одно раньше)")]
+        [SerializeField] int burrowEvery = 3;
+        [Tooltip("Белка ближе этого к стене за спиной — считается прижатой, сторож зарывается при первой возможности")]
+        [SerializeField] float corneredDistance = 2.5f;
+        [SerializeField] float burrowTime = 0.6f;
+        [Tooltip("Скорость холмика под землёй (ед./с)")]
+        [SerializeField] float tunnelSpeed = 3.5f;
+        [Tooltip("Холмик дрожит на месте перед тем, как сторож вырастет")]
+        [SerializeField] float emergeTelegraph = 0.7f;
+        [SerializeField] float emergeTime = 0.5f;
 
         [Header("Корни-шипы")]
         [SerializeField] float spikeTelegraph = 0.85f;
@@ -62,6 +81,11 @@ namespace Squirrel.Enemies
         public int Phase => Hp > maxHp / 2 ? 1 : 2;
         public bool IsExposed => State == WardenState.Exposed;
         public bool IsFighting => State != WardenState.Dormant && State != WardenState.Defeated;
+        /// <summary>Под землёй или зарывается/вырастает: не ранится и не ранит касанием.</summary>
+        public bool IsUnderground => State == WardenState.Burrowing || State == WardenState.Tunneling || (State == WardenState.Emerging && !emergeRising);
+        /// <summary>Куда смотрит: 1 — вправо, -1 — влево.</summary>
+        public float Facing { get; private set; } = 1f;
+        public GameObject Gate => gate;
         public WardenAttack LastAttack { get; private set; }
         public static event System.Action<RootWarden> Defeated;
 
@@ -79,15 +103,36 @@ namespace Squirrel.Enemies
         float sweepX;
         float sweepDir;
         SpriteRenderer sweepBody, sweepMark;
+        float sweepOrigin;
+
+        // Перемещение.
+        Transform visual;
+        Vector3 visualScale = Vector3.one;
+        SpriteRenderer mound;
+        int exposures;
+        float tunnelTargetX;
+        bool emergeRising;
+        int baseContactDamage;
 
         public override bool GivesSap => IsExposed;
-        public override bool CanBeHit => isActiveAndEnabled && IsFighting;
+        public override bool CanBeHit => isActiveAndEnabled && IsFighting && !IsUnderground;
 
         protected override void Awake()
         {
+            // Ворота стоят в проходе и не должны ходить вместе со сторожем (в старых сценах они — его ребёнок).
+            if (gate != null && gate.transform.IsChildOf(transform)) gate.transform.SetParent(transform.parent, true);
             base.Awake();
+            baseContactDamage = contactDamage;
+            visual = transform.Find("Visual");
+            if (visual != null) visualScale = visual.localScale;
             if (gate != null) gate.SetActive(false);
             State = WardenState.Dormant;
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (mound != null) Destroy(mound.gameObject);
         }
 
         void Start()
@@ -122,6 +167,8 @@ namespace Squirrel.Enemies
         protected override void OnReset()
         {
             ClearAttacks();
+            exposures = 0;
+            Face(1f);
             State = WardenState.Dormant;
             enraged = false;
             speed = 1f;
@@ -182,6 +229,7 @@ namespace Squirrel.Enemies
 
             UpdateSpikes(dt);
             UpdateSweep(dt);
+            UpdateWalk(dt);
             timer -= dt * speed;
 
             switch (State)
@@ -207,7 +255,24 @@ namespace Squirrel.Enemies
                     break;
                 case WardenState.Exposed:
                     if (core != null) core.color = Color.Lerp(coreOpen, Color.white, 0.3f + 0.3f * Mathf.Sin(Time.time * 10f));
-                    if (timer <= 0f) { SetCore(false); GoIdle(); }
+                    if (timer <= 0f)
+                    {
+                        SetCore(false);
+                        exposures++;
+                        int every = Mathf.Max(1, Phase == 1 ? burrowEvery : burrowEvery - 1);
+                        if (exposures >= every || SquirrelCornered()) StartBurrow();
+                        else GoIdle();
+                    }
+                    break;
+                case WardenState.Burrowing:
+                    SetVisualHeight(Mathf.Clamp01(timer / burrowTime));
+                    if (timer <= 0f) StartTunnel();
+                    break;
+                case WardenState.Tunneling:
+                    UpdateTunnel(dt);
+                    break;
+                case WardenState.Emerging:
+                    UpdateEmerge();
                     break;
             }
         }
@@ -277,11 +342,21 @@ namespace Squirrel.Enemies
             Expose();
         }
 
+        /// <summary>Отладка и тесты: сразу зарыться и поползти на другую сторону от белки.</summary>
+        public void DebugBurrow()
+        {
+            if (!IsFighting) return;
+            ClearAttacks();
+            SetCore(false);
+            StartBurrow();
+        }
+
         /// <summary>Отладка и тесты: разбудить, не заходя на арену.</summary>
         public void DebugWake() { if (State == WardenState.Dormant) Wake(); }
 
         void Expose()
         {
+            EndBurrow();
             State = WardenState.Exposed;
             timer = exposedTime;
             SetCore(true);
@@ -344,7 +419,10 @@ namespace Squirrel.Enemies
         void ShowSweepMark(bool show)
         {
             if (show && sweepMark == null)
+            {
                 sweepMark = MakeRenderer("Sweep Warning", new Vector2(arena.center.x, floorY + 0.05f), new Vector2(arena.width, 0.1f), new Color(1f, 0.3f, 0.2f, 0.7f));
+                return;
+            }
             if (!show && sweepMark != null) { Destroy(sweepMark.gameObject); sweepMark = null; }
         }
 
@@ -353,23 +431,28 @@ namespace Squirrel.Enemies
             ShowSweepMark(false);
             State = WardenState.Attacking;
             sweepDir = 1f;
-            sweepX = arena.xMin;
-            sweepBody = MakeRenderer("Root Sweep", new Vector2(sweepX, floorY + sweepHeight * 0.5f), new Vector2(0.1f, sweepHeight), new Color(0.4f, 0.28f, 0.18f));
+            sweepOrigin = transform.position.x;
+            sweepX = 0f; // насколько корень уже вытянулся в каждую сторону
+            sweepBody = MakeRenderer("Root Sweep", new Vector2(sweepOrigin, floorY + sweepHeight * 0.5f), new Vector2(0.1f, sweepHeight), new Color(0.4f, 0.28f, 0.18f));
             timer = 0.4f;
         }
 
         void UpdateSweep(float dt)
         {
             if (sweepBody == null) return;
+            // Корень расходится от ног сторожа в обе стороны до стен и втягивается обратно.
+            float reach = Mathf.Max(sweepOrigin - arena.xMin, arena.xMax - sweepOrigin);
             sweepX += sweepDir * sweepSpeed * speed * dt;
-            float tip = Mathf.Clamp(sweepX, arena.xMin, arena.xMax);
-            float len = Mathf.Max(0.1f, tip - arena.xMin);
-            sweepBody.transform.position = new Vector3(arena.xMin + len * 0.5f, floorY + sweepHeight * 0.5f);
+            float ext = Mathf.Clamp(sweepX, 0f, reach);
+            float left = Mathf.Max(arena.xMin, sweepOrigin - ext);
+            float right = Mathf.Min(arena.xMax, sweepOrigin + ext);
+            float len = Mathf.Max(0.1f, right - left);
+            sweepBody.transform.position = new Vector3((left + right) * 0.5f, floorY + sweepHeight * 0.5f);
             sweepBody.transform.localScale = new Vector3(len, sweepHeight, 1f);
             if (sweepDir > 0f)
-                HurtIfTouching(new Rect(arena.xMin, floorY, len, sweepHeight), new Vector2(arena.xMin, floorY));
-            if (sweepDir > 0f && sweepX >= arena.xMax) sweepDir = -1f;
-            else if (sweepDir < 0f && sweepX <= arena.xMin)
+                HurtIfTouching(new Rect(left, floorY, len, sweepHeight), new Vector2(sweepOrigin, floorY));
+            if (sweepDir > 0f && sweepX >= reach) sweepDir = -1f;
+            else if (sweepDir < 0f && sweepX <= 0f)
             {
                 Destroy(sweepBody.gameObject);
                 sweepBody = null;
@@ -377,6 +460,139 @@ namespace Squirrel.Enemies
                 if (sweepsLeft > 0) { State = WardenState.Telegraph; timer = sweepTelegraph * 0.6f; ShowSweepMark(true); }
                 else timer = 0.3f;
             }
+        }
+
+        // ---------- Перемещение ----------
+
+        float MinX => arena.xMin + hitSize.x * 0.5f;
+        float MaxX => arena.xMax - hitSize.x * 0.5f;
+
+        /// <summary>Шаг за белкой: только по полу, только пока не раскрыт и корень не вытянут; ближе keepDistance не подходит.</summary>
+        void UpdateWalk(float dt)
+        {
+            bool canWalk = State == WardenState.Idle || State == WardenState.Telegraph || State == WardenState.Attacking;
+            if (!canWalk || IsUnderground) return;
+            float dx = TargetCenter.x - transform.position.x;
+            if (Mathf.Abs(dx) > 0.3f) Face(Mathf.Sign(dx));
+            if (sweepBody != null) return; // корень растёт из ног — стоим
+            if (Mathf.Abs(dx) <= keepDistance + 0.3f) return;
+            float x = Mathf.MoveTowards(transform.position.x, TargetCenter.x - Mathf.Sign(dx) * keepDistance, walkSpeed * speed * dt);
+            SetX(Mathf.Clamp(x, MinX, MaxX));
+        }
+
+        /// <summary>Белка прижата к стене за спиной, отступать ей некуда.</summary>
+        bool SquirrelCornered()
+        {
+            float sx = TargetCenter.x;
+            float away = Mathf.Sign(sx - transform.position.x);
+            float wall = away > 0f ? arena.xMax : arena.xMin;
+            return Mathf.Abs(wall - sx) < corneredDistance;
+        }
+
+        /// <summary>Куда вынырнуть: по другую сторону от белки, а если там не поместиться — в дальний от неё угол.</summary>
+        float PickTunnelTarget()
+        {
+            float sx = TargetCenter.x;
+            float here = transform.position.x;
+            float far = keepDistance * 1.2f;
+            float behind = sx + Mathf.Sign(sx - here) * far;   // за спиной у белки
+            float front = sx - Mathf.Sign(sx - here) * far;    // по эту сторону, но на расстоянии
+            if (behind >= MinX && behind <= MaxX) return behind;
+            if (front >= MinX && front <= MaxX && Mathf.Abs(front - here) > 2f) return front;
+            return sx - arena.center.x > 0f ? MinX : MaxX;
+        }
+
+        void StartBurrow()
+        {
+            exposures = 0;
+            State = WardenState.Burrowing;
+            timer = burrowTime;
+            contactDamage = 0;
+            CameraShake.Add(0.15f, burrowTime);
+        }
+
+        void StartTunnel()
+        {
+            SetVisualHeight(0f);
+            State = WardenState.Tunneling;
+            tunnelTargetX = PickTunnelTarget();
+            ShowMound(true);
+        }
+
+        void UpdateTunnel(float dt)
+        {
+            float x = Mathf.MoveTowards(transform.position.x, tunnelTargetX, tunnelSpeed * speed * dt);
+            SetX(x);
+            if (Mathf.Approximately(x, tunnelTargetX))
+            {
+                State = WardenState.Emerging;
+                emergeRising = false;
+                timer = emergeTelegraph;
+            }
+        }
+
+        void UpdateEmerge()
+        {
+            if (!emergeRising)
+            {
+                if (mound != null)
+                    mound.transform.localScale = new Vector3(hitSize.x * (1f + 0.12f * Mathf.Sin(Time.time * 30f)), 0.6f, 1f);
+                if (timer > 0f) return;
+                // Вырастает: снова твёрдый, касание ранит.
+                emergeRising = true;
+                timer = emergeTime;
+                contactDamage = baseContactDamage;
+                ShowMound(false);
+                Face(Mathf.Sign(TargetCenter.x - transform.position.x));
+                CameraShake.Add(0.25f, 0.25f);
+            }
+            SetVisualHeight(1f - Mathf.Clamp01(timer / emergeTime));
+            if (timer <= 0f) { EndBurrow(); GoIdle(); }
+        }
+
+        /// <summary>Вернуть сторожа на поверхность сразу (раскрытие, ярость, сброс, смерть).</summary>
+        void EndBurrow()
+        {
+            emergeRising = false;
+            contactDamage = baseContactDamage;
+            SetVisualHeight(1f);
+            ShowMound(false);
+        }
+
+        void ShowMound(bool show)
+        {
+            if (show && mound == null)
+                mound = MakeRenderer("Warden Mound", Vector2.zero, new Vector2(hitSize.x, 0.6f), new Color(0.36f, 0.26f, 0.18f));
+            if (mound == null) return;
+            mound.gameObject.SetActive(show);
+            if (show)
+            {
+                mound.transform.localScale = new Vector3(hitSize.x, 0.6f, 1f);
+                mound.transform.position = new Vector3(transform.position.x, floorY + 0.3f);
+            }
+        }
+
+        void SetX(float x)
+        {
+            var p = transform.position;
+            transform.position = new Vector3(x, p.y, p.z);
+            if (mound != null && mound.gameObject.activeSelf)
+                mound.transform.position = new Vector3(x, floorY + 0.3f);
+        }
+
+        void Face(float dir)
+        {
+            if (dir == 0f) return;
+            Facing = dir;
+            if (visual != null)
+                visual.localScale = new Vector3(Mathf.Abs(visualScale.x) * dir, visual.localScale.y, visualScale.z);
+        }
+
+        /// <summary>0 — ушёл под землю, 1 — во весь рост (сжимается к ногам).</summary>
+        void SetVisualHeight(float k)
+        {
+            if (visual == null) return;
+            visual.localScale = new Vector3(visual.localScale.x, visualScale.y * k, visualScale.z);
         }
 
         void HurtIfTouching(Rect r, Vector2 from)
@@ -409,6 +625,7 @@ namespace Squirrel.Enemies
             sweepsLeft = 0;
             if (sweepBody != null) { Destroy(sweepBody.gameObject); sweepBody = null; }
             ShowSweepMark(false);
+            EndBurrow();
         }
 
         /// <summary>Тесты: выставить здоровье.</summary>
