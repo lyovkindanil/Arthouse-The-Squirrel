@@ -310,9 +310,19 @@ def tail_dirs(P, dirs, parent, add=None):
     for i, b in enumerate(TAIL):
         want = dirs[i] - REST_DIR[i]
         P[b] = want - cum + (add[i] if add else 0); cum = want
-SIT_TAIL = (52, 74, 92, 103, 107, 102, 92, 78, 62, 46)       # up along the back, tip curls away: the classic S
-def sit(P, lean=0.0, drop=0.0, head=0.0, head_yaw=0.0, arms=(-104, -138), breath=0.0, tail_add=None):
-    """sitting upright on the haunches. lean: extra forward pitch of the body; arms: side-view directions of upper and lower front leg"""
+def tail_pose(P, dirs, yaws, parent):
+    """tail by side-view directions of its bones plus a sideways sweep (yaw, cumulative, + = to the camera side)"""
+    Wprev = Matrix.Rotation(math.radians(parent), 3, 'X')   # the sweep is about the true vertical, however the hips are tilted
+    for i, b in enumerate(TAIL):
+        W = Matrix.Rotation(math.radians(yaws[i]), 3, 'Z') @ Matrix.Rotation(math.radians(dirs[i] - REST_DIR[i]), 3, 'X')
+        P[b] = Wprev.inverted() @ W; Wprev = W
+def mix(a, b, k): return [x + (y - x) * k for x, y in zip(a, b)]
+# the tail keeps the shape the model was sculpted in (back from the rump, up, curl forward), only leaned to the back
+SIT_TAIL = [d + 6 for d in REST_DIR]
+NO_YAW = [0.0] * 10
+def sit(P, lean=0.0, drop=0.0, head=0.0, head_yaw=0.0, arms=(-104, -138), breath=0.0, tail_add=None,
+        sp=4.0, ch=8.0, nk=22.0, tail=None, yaws=None):
+    """sitting on the haunches. lean: forward pitch of the body; arms: side-view directions of upper and lower front leg"""
     hp = -58 + lean
     body = (0.04, -0.2 - drop)
     P["hips"] = hp; P["hips_loc"] = body
@@ -321,11 +331,22 @@ def sit(P, lean=0.0, drop=0.0, head=0.0, head_yaw=0.0, arms=(-104, -138), breath
         T = arm.data.bones["thigh" + s_].head_local; a = _rot((T.y - H.y, T.z - H.z), hp)
         u, l = ik("thigh" + s_, "shin" + s_, ty, -0.765, body, -1, A=(H.y + a[0], H.z + a[1]), parent=hp)
         P["thigh" + s_] = u; P["shin" + s_] = l; P["paw_hind" + s_] = -(u + l + hp)
-        aim(P, ["arm_upper" + s_, "arm_lower" + s_, "paw_front" + s_], (arms[0], arms[1], arms[1] - 25), hp + 12)
-    P["spine"] = 4; P["chest"] = 8; P["chest_scale"] = 1 + 0.03 * breath
-    P["neck"] = (22, head_yaw * 0.3); P["head"] = (-(hp + 34) + head, head_yaw * 0.7)
-    tail_dirs(P, SIT_TAIL, hp, tail_add)
+        aim(P, ["arm_upper" + s_, "arm_lower" + s_, "paw_front" + s_], (arms[0], arms[1], arms[1] - 25), hp + sp + ch)
+    P["spine"] = sp; P["chest"] = ch; P["chest_scale"] = 1 + 0.03 * breath
+    P["neck"] = (nk, head_yaw * 0.3); P["head"] = (-(hp + sp + ch + nk) + head, head_yaw * 0.7)
+    dirs = list(tail or SIT_TAIL)
+    if tail_add: dirs = [d + x for d, x in zip(dirs, tail_add)]
+    tail_pose(P, dirs, yaws or NO_YAW, hp)
     return P
+def whip(t, times, amp=1.0, dur=0.11):
+    """tail flicks the way squirrels do it: a quick wave that runs up the tail, strongest at the tip. returns extra direction per bone"""
+    out = [0.0] * 10
+    for a in times:
+        x = (t - a) % 1.0
+        if x < dur:
+            e = sin(pi * x / dur)
+            for i in range(10): out[i] += amp * (2.0 + 2.2 * i) * e * sin(2 * pi * x / dur - 0.5 * i)
+    return out
 
 def sit_alert(t):
     """stands up like a post and looks around: quick turns of the head, freezes, ear and tail twitches"""
@@ -333,8 +354,7 @@ def sit_alert(t):
     yaw = track(t, [(0.0, 0), (0.12, -38), (0.34, -38), (0.38, 12), (0.58, 12), (0.62, -20), (0.8, -20), (0.86, 0)])
     pitch = track(t, [(0.0, 0), (0.12, -6), (0.38, 4), (0.62, -14), (0.8, -14), (0.86, 0)])
     lean = track(t, [(0.0, 0), (0.6, -7), (0.82, -7), (0.9, 0)], w=0.06)                 # stretches up to look further
-    fl = pulse(t, 0.22, 0.03, 0.1) + pulse(t, 0.3, 0.03, 0.1) + pulse(t, 0.7, 0.03, 0.12)   # tail flicks
-    add = [(-0.45 * i) * fl for i in range(1, 11)]
+    add = whip(t, (0.22, 0.31, 0.7), 0.8)                                               # tail flicks
     sit(P, lean=lean, head=pitch, head_yaw=yaw, breath=0.5 - 0.5 * cos(4 * pi * t), tail_add=add)
     P["ear.L"] = 14 * pulse(t, 0.16) + 12 * pulse(t, 0.5) - 10 * pulse(t, 0.66)
     P["ear.R"] = 12 * pulse(t, 0.44) + 14 * pulse(t, 0.74) - 8 * pulse(t, 0.2)
@@ -349,8 +369,42 @@ def nibble(t):
     yaw = track(t, [(0.0, 0), (0.66, -30), (0.78, -30), (0.82, 0)])
     sit(P, lean=10 * busy + 2, head=14 * busy + 2.5 * chew - 6 * (1 - busy), head_yaw=yaw,
         arms=(-150 + 4 * turn, 128 + 5 * chew + 6 * turn), breath=0.5 - 0.5 * cos(4 * pi * t),
-        tail_add=[0.5 * sin(2 * pi * t - 0.4 * i) for i in range(1, 11)])
+        tail_add=[(0.4 + 0.25 * i) * sin(2 * pi * t - 0.4 * i) for i in range(1, 11)])
     P["ear.L"] = 5 * chew + 14 * pulse(t, 0.64); P["ear.R"] = 5 * chew + 12 * pulse(t, 0.7)
+    return P
+
+# calm sit, and curling up into a ball
+BALL_TAIL = (-4, -3, -2, 0, 0, 1, 2, 3, 5, 8)                   # tail laid on the ground ...
+BALL_YAW = (38, 68, 94, 116, 135, 151, 165, 177, 187, 195)    # ... and wrapped around the body on the camera side, tip over the nose
+def rest_pose(P, c_body, c_head, c_flat, c_wrap, breath=0.0, head=0.0, head_yaw=0.0, tail_add=None):
+    """0 = sitting hunched and calm, 1 = curled into a ball. The back stays arched like a dome, the nose goes down to the belly,
+    the tail first lies down behind (c_flat), then sweeps around the body (c_wrap)"""
+    arms = mix((-96, -86), (-62, -176), c_body)
+    sit(P, lean=30 - 42 * c_body, drop=0.03 * c_body, head=head * (1 - c_head) + 6 + 144 * c_head, head_yaw=head_yaw * (1 - c_head), arms=arms, breath=breath,
+        sp=10 + 40 * c_body, ch=12 + 48 * c_body, nk=14 + 36 * c_head,
+        tail=mix(SIT_TAIL, BALL_TAIL, c_flat), yaws=mix(NO_YAW, BALL_YAW, c_wrap), tail_add=tail_add)
+    for s_ in (".L", ".R"): P["ear" + s_] = -22 * c_head
+    return P
+def sit_idle(t):
+    """sits quietly: breathes, looks to the side once, ear twitches, the tail tip sways"""
+    P = {}
+    yaw = track(t, [(0.0, 0), (0.45, -28), (0.7, -28), (0.76, 0)])
+    rest_pose(P, 0, 0, 0, 0, breath=0.5 - 0.5 * cos(4 * pi * t), head=track(t, [(0.0, 0), (0.45, -5), (0.76, 0)]), head_yaw=yaw,
+              tail_add=[(0.3 + 0.3 * i) * sin(2 * pi * t - 0.45 * i) for i in range(1, 11)])
+    P["ear.L"] = 12 * pulse(t, 0.2) + 10 * pulse(t, 0.6); P["ear.R"] = 12 * pulse(t, 0.52) + 8 * pulse(t, 0.9)
+    return P
+def curl_up(t):
+    """from the calm sit: sinks down, tucks the nose to the belly, wraps the tail around herself"""
+    P = {}
+    rest_pose(P, ease(t / 0.5), ease((t - 0.25) / 0.45), ease((t - 0.1) / 0.5), ease((t - 0.22) / 0.78))
+    return P
+def sleep_ball(t):
+    """asleep in a ball: slow breathing, the tail tip stirs"""
+    P = {}
+    br = 0.5 - 0.5 * cos(2 * pi * t)
+    rest_pose(P, 1, 1, 1, 1, breath=1.6 * br, tail_add=[0.25 * i * br for i in range(1, 11)])
+    P["hips_loc"] = (P["hips_loc"][0], P["hips_loc"][1] + 0.008 * br)
+    P["ear.L"] = -22 + 10 * pulse(t, 0.55, 0.03, 0.06)
     return P
 
 def tail_flag(t):
@@ -373,10 +427,11 @@ def tail_flag(t):
         u, l = ik("thigh" + s_, "shin" + s_, ankle[0], ankle[1], body, -1)
         P["thigh" + s_] = u; P["shin" + s_] = l; P["paw_hind" + s_] = -(u + l)
         P["ear" + s_] = -10 * tense + 10 * jerk
-    for i, b in enumerate(TAIL, 1):
-        d = 0.006 * i
-        fi = sum(pulse(t - d, a, 0.025, 0.07) for a in flicks)
-        P[b] = (2.0 if i < 4 else 0.5) * tense + (9 - 0.5 * i) * fi + 1.2 * sin(2 * pi * 3 * t - 0.5 * i) * (1 - min(1, fi))
+    wv = whip(t, flicks, 1.0)
+    cum = 0.0
+    for i, b in enumerate(TAIL):
+        want = 3.0 * tense + wv[i] + (0.6 + 0.2 * i) * sin(2 * pi * 2 * t - 0.5 * i)   # raised a little, flicks, idle sway
+        P[b] = want - cum; cum = want
     return P
 
 def sniff(t):
@@ -407,6 +462,7 @@ def sniff(t):
 bake("run", 16, run, True); bake("tail_attack_front", 28, lambda t: tail_attack(t, 1), False); bake("tail_attack_back", 28, lambda t: tail_attack(t, -1), False); bake("climb", 30, climb, True)
 bake("climb_hug", 30, climb_hug, True)["holdout"] = "Trunk"; bake("tail_spin", 28, tail_spin, False)
 bake("sit_alert", 90, sit_alert, True); bake("nibble", 60, nibble, True); bake("tail_flag", 60, tail_flag, True); bake("sniff", 90, sniff, True)
+bake("sit_idle", 60, sit_idle, True); bake("curl_up", 40, curl_up, False); bake("sleep_ball", 90, sleep_ball, True)
 bake("tail_flip_side", 22, tail_flip_side, False)["wide"] = 1.25; bake("tail_flip_front", 24, tail_flip_front, False)["wide"] = 1.25
 if "Trunk" not in bpy.data.objects:
     bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=0.2, depth=5, location=(0, -0.3 - 0.2, 0.2))
