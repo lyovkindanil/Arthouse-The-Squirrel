@@ -13,10 +13,15 @@ def pos(x): return max(0.0, x)
 def smooth(x): x = min(1, max(0, x)); return x * x * (3 - 2 * x)
 
 def apply(pose, frame, prev):
-    """pose: {bone: deg, 'hips_loc': (dy, dz), 'root_loc': (dy, dz), 'chest_scale': s}"""
+    """pose: {bone: deg or (pitch, yaw) -- yaw turns about the vertical axis, + swings the tail to the camera side, 'hips_loc': (dy, dz), 'root_loc': (dy, dz), 'chest_scale': s}"""
     for b in pb:
         R = b.bone.matrix_local.to_3x3()
-        q = (R.inverted() @ Matrix.Rotation(math.radians(pose.get(b.name, 0.0)), 3, 'X') @ R)
+        v = pose.get(b.name, 0.0)
+        if isinstance(v, Matrix): M = v
+        else:
+            pitch, yaw = v if isinstance(v, tuple) else (v, 0.0)
+            M = Matrix.Rotation(math.radians(yaw), 3, 'Z') @ Matrix.Rotation(math.radians(pitch), 3, 'X')
+        q = (R.inverted() @ M @ R)
         e = q.to_euler('XYZ', prev[b.name]) if b.name in prev else q.to_euler('XYZ')
         b.rotation_euler = e; prev[b.name] = e.copy()
         b.keyframe_insert("rotation_euler", frame=frame)
@@ -59,58 +64,90 @@ def run(t):
     P["chest_scale"] = 1.0
     return P
 
-# ---------------------------------------------------------------- tail attack: 20 frames, one shot
+# ---------------------------------------------------------------- tail attack: 36 frames, side sweep
 REST_DIR = (20, 32, 45, 58, 69, 93, 120, 148, 196, 236)       # direction of each tail bone at rest
-HIT_DIR = (82, 102, 120, 137, 152, 166, 180, 195, 212, 228)    # arc over the back, tip lands in front of the nose
-WIND_DIR = (2, 8, 16, 26, 38, 55, 78, 104, 140, 176)           # pulled back and low before the hit
+FLAT_DIR = (0, 0, 2, 3, 4, 5, 6, 8, 11, 15)                  # tail lowered and stretched for the sweep
 def local(dirs):
     d = [x - r for x, r in zip(dirs, REST_DIR)]
     return [d[0]] + [d[i] - d[i - 1] for i in range(1, 10)]
-HIT, WIND = local(HIT_DIR), local(WIND_DIR)
+FLAT = local(FLAT_DIR)
+SWEEP = (72, 44, 24, 10, 6, 4, 3, 2, 2, 1)                     # yaw per bone at the hit: the base turns, the rest reaches forward
+BACK = (-16, -10, -7, -5, -3, -2, -1, 0, 0, 0)                # wind-up to the far side
+def ease(x): x = min(1, max(0, x)); return 0.5 - 0.5 * cos(pi * x)
 def tail_attack(t):
     P = {}
-    def env(a, b, c, d, x):                     # 0 -> 1 between a..b, hold, 1 -> 0 between c..d
-        return smooth((x - a) / (b - a)) * (1 - smooth((x - c) / (d - c)))
-    wind = env(0.0, 0.2, 0.2, 0.34, t)          # wind-up
-    body = env(0.2, 0.36, 0.5, 0.95, t)         # lunge
-    P["hips_loc"] = (0.04 * wind - 0.05 * body, -0.05 * wind - 0.04 * body)
-    P["hips"] = -7 * wind + 10 * body
-    P["spine"] = 5 * wind - 4 * body; P["chest"] = 4 * wind - 6 * body
-    P["neck"] = -4 * body; P["head"] = 6 * wind + 12 * body
+    def env(a, b, c, d, x): return ease((x - a) / (b - a)) * (1 - ease((x - c) / (d - c)))
+    wind = env(0.0, 0.26, 0.26, 0.48, t)
+    hit = env(0.24, 0.52, 0.6, 1.0, t)
+    P["hips_loc"] = (0.03 * wind - 0.03 * hit, -0.035 * wind - 0.03 * hit)
+    P["hips"] = (-4 * wind + 4 * hit, 5 * wind - 9 * hit)          # the body turns into the swing
+    P["spine"] = (3 * wind, -3 * wind + 5 * hit); P["chest"] = (2 * wind - 3 * hit, -2 * wind + 4 * hit)
+    P["neck"] = -3 * hit; P["head"] = (4 * wind + 5 * hit, 0)
     for side in (".L", ".R"):
-        P["arm_upper" + side] = 6 * wind - 18 * body; P["arm_lower" + side] = 10 * wind + 8 * body
-        P["thigh" + side] = -10 * wind + 14 * body; P["shin" + side] = 14 * wind - 8 * body
-        P["ear" + side] = -30 * body + 6 * wind
+        P["arm_upper" + side] = 5 * wind - 8 * hit; P["arm_lower" + side] = 8 * wind + 4 * hit
+        P["thigh" + side] = -8 * wind + 6 * hit; P["shin" + side] = 12 * wind + 6 * hit
+        P["ear" + side] = -10 * hit + 5 * wind
+    pc = yc = 0.0; Wprev = Matrix.Identity(3)
     for i, b in enumerate(TAIL, 1):
-        d = 0.011 * i                           # the whip travels from the base to the tip
-        w = env(0.0, 0.2, 0.2, 0.32, t - d * 0.4)
-        s = env(0.2, 0.33, 0.48, 0.97, t - d)
-        over = env(0.3, 0.42, 0.42, 0.62, t - d)   # overshoot right after the hit
-        P[b] = WIND[i - 1] * w + HIT[i - 1] * s + 2.5 * over
+        d = 0.014 * i                                              # the wave runs from the base to the tip
+        w = env(0.0, 0.26, 0.26, 0.5, t - d * 0.5)
+        flat = env(0.08, 0.4, 0.62, 1.0, t - d * 0.5)
+        h = env(0.24, 0.52, 0.6, 1.0, t - d)
+        pc += FLAT[i - 1] * flat; yc += BACK[i - 1] * w + SWEEP[i - 1] * h
+        # the sweep stays horizontal: yaw about the vertical axis of the body, not of the bent tail
+        W = Matrix.Rotation(math.radians(yc), 3, 'Z') @ Matrix.Rotation(math.radians(pc), 3, 'X')
+        P[b] = Wprev.inverted() @ W; Wprev = W
     return P
 
-# ---------------------------------------------------------------- climb: 30 frames, wall on the right
+# ---------------------------------------------------------------- climb: 30 frames, trunk on the right
+# Worked out in the rest frame (trunk = the ground plane, "up the trunk" = towards the head, -Y);
+# the root bone then turns the whole pose upright. Paws are planted on the trunk with two-bone IK.
+import math as _m
+def _geo(upper, lower):
+    A = arm.data.bones[upper].head_local; B = arm.data.bones[lower].head_local; C = arm.data.bones[lower].tail_local
+    L1 = _m.hypot(B.y - A.y, B.z - A.z); L2 = _m.hypot(C.y - B.y, C.z - B.z)
+    return (A.y, A.z), L1, L2, _m.atan2(B.z - A.z, B.y - A.y), _m.atan2(C.z - B.z, C.y - B.y), (C.y, C.z)
+def ik(upper, lower, ty, tz, body, knee):
+    """returns pitch for upper and lower bone so that the wrist/ankle reaches (ty, tz); knee: +1 bends to the tail, -1 to the head"""
+    (ay, az), L1, L2, r1, r2, _ = _geo(upper, lower)
+    ay += body[0]; az += body[1]
+    dy, dz = ty - ay, tz - az; D = min(_m.hypot(dy, dz), (L1 + L2) * 0.995)
+    base = _m.atan2(dz, dy); al = _m.acos((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D))
+    a1 = base + knee * al                                  # direction of the upper bone
+    by, bz = ay + L1 * _m.cos(a1), az + L1 * _m.sin(a1)
+    a2 = _m.atan2(az + D * _m.sin(base) - bz, ay + D * _m.cos(base) - by)
+    def wrap(x): return (x + 180) % 360 - 180
+    u = wrap(_m.degrees(a1 - r1)); l = wrap(_m.degrees(a2 - r2) - u)
+    return u, l
+PRESS = 0.12                                               # how far the body is pulled to the trunk
+def stride(u):
+    """u in 0..1: 0..0.7 the paw grips and the body pulls past it, 0.7..1 quick reach up. returns (travel 0..1, lift 0..1)"""
+    u %= 1.0
+    if u < 0.7: return u / 0.7, 0.0
+    k = (u - 0.7) / 0.3; return 1 - ease(k), _m.sin(pi * k)
 def climb(t):
     p = 2 * pi * t; P = {}
     P["root"] = -90; P["root_loc"] = (0.0, 0.95)
-    P["hips_loc"] = (-0.025 * cos(2 * p), 0.0)           # along the body: two pulls per cycle
-    P["hips"] = 9 + 2.5 * sin(2 * p); P["spine"] = 2 + 3 * sin(p); P["chest"] = 2 - 3 * sin(p)
-    P["neck"] = 2; P["head"] = 6 + 3 * sin(2 * p + 0.5)   # looks up along the trunk and a little outwards
-    for side, o in ((".L", 0.0), (".R", pi)):
-        a = p + o
-        P["arm_upper" + side] = -30 - 30 * sin(a)        # reach up along the wall
-        P["arm_lower" + side] = 22 + 34 * pos(cos(a))    # lift the paw while it travels up
-        P["paw_front" + side] = -30 + 22 * pos(cos(a))
-        h = p + o + pi                                   # diagonal pairs
-        P["thigh" + side] = -38 - 24 * sin(h)
-        P["shin" + side] = 46 + 24 * pos(cos(h))
-        P["paw_hind" + side] = -18 + 18 * pos(cos(h))
-        P["ear" + side] = -8 + 4 * sin(2 * p + o)
+    body = (-0.022 * cos(2 * p + 0.6), -PRESS + 0.012 * cos(2 * p))   # surge up with every pull, breathing off the trunk
+    P["hips_loc"] = body
+    P["neck"] = -8 + 3 * sin(2 * p); P["head"] = -10 + 3 * sin(2 * p + 0.8)   # looks up the trunk
+    for side, o in ((".L", 0.0), (".R", 0.5)):
+        tr, lift = stride(t + o)
+        (sy, sz), *_ , wrist = _geo("arm_upper" + side, "arm_lower" + side)
+        u, l = ik("arm_upper" + side, "arm_lower" + side, sy - 0.20 + 0.30 * tr, wrist[1] + 0.07 * lift, body, +1)
+        P["arm_upper" + side] = u; P["arm_lower" + side] = l
+        P["paw_front" + side] = -(u + l) * 0.85 + 30 * lift
+        tr, lift = stride(t + o + 0.5)                     # diagonal pairs
+        (hy, hz), *_ , ankle = _geo("thigh" + side, "shin" + side)
+        u, l = ik("thigh" + side, "shin" + side, hy - 0.16 + 0.30 * tr, ankle[1] + 0.06 * lift, body, -1)
+        P["thigh" + side] = u; P["shin" + side] = l
+        P["paw_hind" + side] = -(u + l) * 0.85 + 25 * lift
+        P["ear" + side] = -6 + 5 * sin(2 * p + o * 6)
     for i, b in enumerate(TAIL, 1):
-        P[b] = (-9, 2, 6, 6, 3, 1, 1, 1, 1, 1)[i - 1] + (1.6 + 0.3 * i) * sin(p - 0.5 * i)
+        P[b] = (-10, -6, -2, 2, 3, 2, 1, 1, 1, 1)[i - 1] + (1.4 + 0.3 * i) * sin(2 * p - 0.5 * i)
     return P
 
-bake("run", 16, run, True); bake("tail_attack", 20, tail_attack, False); bake("climb", 30, climb, True)
+bake("run", 16, run, True); bake("tail_attack", 36, tail_attack, False); bake("climb", 30, climb, True)
 arm.animation_data.action = bpy.data.actions["idle_test"]
 for b in pb: b.location = (0, 0, 0); b.rotation_euler = (0, 0, 0); b.scale = (1, 1, 1)
 scn.frame_set(1)
