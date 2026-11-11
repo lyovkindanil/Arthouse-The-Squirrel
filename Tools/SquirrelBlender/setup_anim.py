@@ -6,7 +6,7 @@ scn = bpy.context.scene; arm = bpy.data.objects["SquirrelRig"]
 scn.render.engine = "CYCLES"; scn.cycles.samples = 24; scn.cycles.device = "CPU"
 scn.render.film_transparent = True
 scn.render.resolution_x = scn.render.resolution_y = 512
-scn.render.fps = 24; scn.frame_start = 1; scn.frame_end = 48
+scn.render.fps = 30; scn.frame_start = 1; scn.frame_end = 60
 w = bpy.data.worlds.new("SpriteWorld"); scn.world = w; w.use_nodes = True
 w.node_tree.nodes["Background"].inputs[1].default_value = 2.2
 cam = bpy.data.objects.new("SpriteCam", bpy.data.cameras.new("SpriteCam")); scn.collection.objects.link(cam); scn.camera = cam
@@ -20,8 +20,8 @@ for b in pb: b.rotation_mode = 'XYZ'
 arm.animation_data_create()
 act = bpy.data.actions.new("idle_test"); act.use_fake_user = True
 arm.animation_data.action = act
-N = 48
-for f in range(1, N + 2, 2):
+N = 60
+for f in range(1, N + 2):
     t = 2 * math.pi * (f - 1) / N
     for i in range(1, 11):
         b = pb[f"tail.{i:02d}"]

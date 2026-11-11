@@ -1,10 +1,10 @@
 # Renders an action of SquirrelRig to transparent PNG frames + meta.json (pivot, pixels per unit).
-# blender -b squirrel_rig.blend -P render_sprites.py -- <action> <out_dir> [size=512] [step=2] [samples=24]
+# blender -b squirrel_rig.blend -P render_sprites.py -- <action> <out_dir> [size=512] [step=1] [samples=24]
 import bpy, sys, json, os
 a = sys.argv[sys.argv.index("--") + 1:]
 action, out = a[0], a[1]
 size = int(a[2]) if len(a) > 2 else 512
-step = int(a[3]) if len(a) > 3 else 2
+step = int(a[3]) if len(a) > 3 else 1
 samples = int(a[4]) if len(a) > 4 else 24
 if len(a) > 5: bpy.ops.wm.open_mainfile(filepath=a[5])   # only for running without the blender binary
 scn = bpy.context.scene; arm = bpy.data.objects["SquirrelRig"]; cam = scn.camera
