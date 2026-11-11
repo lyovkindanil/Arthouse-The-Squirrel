@@ -14,6 +14,8 @@ scn.render.film_transparent = True; scn.render.resolution_x = scn.render.resolut
 scn.render.image_settings.file_format = "PNG"; scn.render.image_settings.color_mode = "RGBA"
 f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
 loop = bool(act.get("loop", True))
+fur = bpy.data.objects["Squirrel"].modifiers.get("FurFlutter")   # fast moves need a stronger stir of the strands to be seen at all
+if fur: fur.strength = 0.05 * float(act.get("fur", 1.0))
 wide = float(act.get("wide", 1.0))                       # big moves get a bigger frame at the same pixels per unit
 size = int(round(size * wide)); cam.data.ortho_scale *= wide
 scn.render.resolution_x = scn.render.resolution_y = size
@@ -22,7 +24,7 @@ for name in ("Trunk",):                                  # objects that only cut
 frames = list(range(f0, f1 if loop else f1 + 1, step))   # in a loop the last key equals the first one, so it is skipped
 wind = bpy.data.objects.get("FurWind")                  # strand noise must repeat with the loop
 if wind and wind.animation_data:
-    n = (f1 - f0) if loop else 60; r = 0.2 * n / 60
+    n = (f1 - f0) if loop else 60; r = 0.2 * (n / 60) ** 0.5   # short loops still get a visible stir
     for fc in wind.animation_data.drivers:
         fc.driver.expression = (f"{r}*cos(2*pi*frame/{n})", f"{r*0.6}*sin(4*pi*frame/{n})", f"{r}*sin(2*pi*frame/{n})")[fc.array_index]
 os.makedirs(out, exist_ok=True)

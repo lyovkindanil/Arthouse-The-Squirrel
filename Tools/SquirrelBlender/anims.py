@@ -555,6 +555,8 @@ if "Trunk" not in bpy.data.objects:
     m = bpy.data.materials.new("TrunkHoldout"); m.use_nodes = True; nt = m.node_tree; nt.nodes.clear()
     o = nt.nodes.new("ShaderNodeOutputMaterial"); h = nt.nodes.new("ShaderNodeHoldout"); nt.links.new(h.outputs[0], o.inputs[0])
     tr.data.materials.append(m); tr.hide_render = True
+for name in ("run", "jump", "paw_swipe", "tail_flag", "tail_attack_front", "tail_attack_back", "tail_spin", "tail_flip_side", "tail_flip_front"):
+    bpy.data.actions[name]["fur"] = 2.0                 # strands stir twice as strong in fast actions (read by render_sprites.py)
 arm.animation_data.action = bpy.data.actions["idle_test"]
 for b in pb: b.location = (0, 0, 0); b.rotation_euler = (0, 0, 0); b.scale = (1, 1, 1)
 scn.frame_set(1)
