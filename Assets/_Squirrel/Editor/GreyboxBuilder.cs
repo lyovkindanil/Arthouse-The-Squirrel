@@ -236,18 +236,9 @@ namespace SquirrelEditor
             var body = new GameObject("Visual").transform;
             body.SetParent(sq.transform, false);
             // Визуал с пивотом у ног, чтобы сжатие при приземлении шло от земли.
-            var concept = LoadSquirrelConcept();
-            if (concept != null)
-            {
-                // Белка из концепт-арта: один спрайт + мягкое голубое свечение за ней.
-                MakeShape(body, "Spirit Glow", glow, new Vector2(-0.15f, 0.7f), new Vector2(3.2f, 2.8f), new Color(0.45f, 0.7f, 1f, 0.22f), 108);
-                var art = new GameObject("Concept Sprite").AddComponent<SpriteRenderer>();
-                art.transform.SetParent(body, false);
-                art.sprite = concept;
-                art.sharedMaterial = unlit;
-                art.sortingOrder = 110;
-            }
-            else
+            // Белка из концепт-арта (облик + аниматор); без арта — прежние прямоугольники.
+            bool hasArt = BuildSquirrelArt(body, controller);
+            if (!hasArt)
             {
                 MakeSprite(body, "Body", new Vector2(0, 0.35f), new Vector2(0.9f, 0.7f), new Color(0.92f, 0.52f, 0.22f), 110);
                 var tail = MakeSprite(body, "Tail", new Vector2(-0.55f, 0.75f), new Vector2(0.45f, 0.9f), new Color(0.75f, 0.38f, 0.16f), 109);
@@ -265,6 +256,8 @@ namespace SquirrelEditor
             var attack = sq.AddComponent<TailAttack>();
             var slash = MakeSprite(sq.transform, "Tail Slash", Vector2.zero, Vector2.one, new Color(1f, 0.95f, 0.7f, 0.45f), 113);
             Set(attack, "slash", slash);
+            var spiritAnim = body.GetComponentInChildren<SquirrelSpriteAnimator>();
+            if (spiritAnim != null) Set(spiritAnim, "attack", attack);
 
             var thrower = sq.AddComponent<AcornThrower>();
             Set(thrower, "sprite", white);

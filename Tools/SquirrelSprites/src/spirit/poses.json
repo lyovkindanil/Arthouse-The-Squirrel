@@ -1,0 +1,6 @@
+{
+ "idle":  {"key": "black", "eye": 59, "torso": [640, 730], "tail": [470, 700], "ground": [632, 936]},
+ "run":   {"eye": 59, "torso": [640, 700], "tail": [470, 650], "ground": [660, 888]},
+ "jump":  {"eye": 53, "torso": [690, 440], "tail": [600, 580], "center": true},
+ "cling": {"eye": 59, "torso": [400, 470], "tail": [440, 720], "wall": [[222, 200], [292, 720]], "trunk": true}
+}

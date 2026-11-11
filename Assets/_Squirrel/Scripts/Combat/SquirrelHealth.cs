@@ -20,7 +20,7 @@ namespace Squirrel.Combat
 
         SquirrelController controller;
         SquirrelInput input;
-        SpriteRenderer[] renderers;
+        Renderer[] renderers;
         float invulnTimer, healTimer;
 
         public CombatSettings Settings => settings;
@@ -48,7 +48,7 @@ namespace Squirrel.Combat
                 Debug.LogWarning("SquirrelHealth: не назначены CombatSettings, беру значения по умолчанию.");
                 settings = ScriptableObject.CreateInstance<CombatSettings>();
             }
-            if (visual != null) renderers = visual.GetComponentsInChildren<SpriteRenderer>();
+            if (visual != null) renderers = visual.GetComponentsInChildren<Renderer>(); // и спрайты, и меш-позы белки
             Current = Max;
         }
 

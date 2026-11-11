@@ -1,0 +1,45 @@
+{
+ "form": "spirit",
+ "poses": [
+  {
+   "name": "idle",
+   "ppu": 680.0,
+   "pivotX": 0.6289,
+   "pivotY": 0.0359,
+   "anchorX": 0.012,
+   "anchorY": 0.303,
+   "tailX": -0.238,
+   "tailY": 0.347
+  },
+  {
+   "name": "run",
+   "ppu": 680.0,
+   "pivotX": 0.6417,
+   "pivotY": 0.0071,
+   "anchorX": -0.029,
+   "anchorY": 0.276,
+   "tailX": -0.279,
+   "tailY": 0.35
+  },
+  {
+   "name": "jump",
+   "ppu": 610.85,
+   "pivotX": 0.6701,
+   "pivotY": 0.354,
+   "anchorX": 0.0,
+   "anchorY": 0.35,
+   "tailX": -0.147,
+   "tailY": 0.121
+  },
+  {
+   "name": "cling",
+   "ppu": 680.0,
+   "pivotX": 0.5547,
+   "pivotY": 0.3179,
+   "anchorX": 0.194,
+   "anchorY": 0.35,
+   "tailX": 0.184,
+   "tailY": -0.022
+  }
+ ]
+}
