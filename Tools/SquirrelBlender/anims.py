@@ -409,6 +409,88 @@ def sleep_ball(t):
     P["ear.L"] = -45 + 12 * pulse(t, 0.55, 0.03, 0.06)
     return P
 
+def keyed(t, keys):
+    """smooth interpolation through [(time, value)] keys, one shot"""
+    keys = sorted(keys)
+    if t <= keys[0][0]: return keys[0][1]
+    for (t0, v0), (t1, v1) in zip(keys, keys[1:]):
+        if t <= t1: return v0 + (v1 - v0) * ease((t - t0) / (t1 - t0))
+    return keys[-1][1]
+def paw_swipe(t):
+    """rears up a little on the haunches, pulls the near front paw back and swats forward and down, then drops back on all fours"""
+    P = {}
+    rear = keyed(t, [(0.0, 0), (0.22, 1), (0.3, 1), (0.44, 0.3), (0.58, 0.15), (0.95, 0)])               # how much the front is lifted
+    hit = keyed(t, [(0.3, 0), (0.42, 1), (0.54, 1), (0.9, 0)])                   # lunge that comes with the swat
+    hp = -40 * rear + 16 * hit
+    body = (0.04 * rear - 0.09 * hit, -0.10 * rear + 0.02 * hit)
+    P["hips"] = hp; P["hips_loc"] = body
+    sp, ch = 3 * rear - 2 * hit, 5 * rear - 4 * hit
+    P["spine"] = sp; P["chest"] = ch
+    P["neck"] = (14 * rear - 4 * hit, 0); P["head"] = (10 * rear + 10 * hit, -8 * hit)
+    H = arm.data.bones["hips"].head_local
+    for s_ in (".L", ".R"):
+        (hy, hz), *_ , ankle = _geo("thigh" + s_, "shin" + s_)
+        T = arm.data.bones["thigh" + s_].head_local; a = _rot((T.y - H.y, T.z - H.z), hp)
+        u, l = ik("thigh" + s_, "shin" + s_, ankle[0], ankle[1], body, -1, A=(H.y + a[0], H.z + a[1]), parent=hp)
+        P["thigh" + s_] = u; P["shin" + s_] = l; P["paw_hind" + s_] = -(u + l + hp)
+        P["ear" + s_] = 6 * rear - 26 * hit
+    par = hp + sp + ch
+    r_up, r_lo, r_pw = _psi("arm_upper.L"), _psi("arm_lower.L"), _psi("paw_front.L")
+    # far paw: just tucks to the chest while she is up
+    aim(P, ["arm_upper.L", "arm_lower.L", "paw_front.L"], (r_up - 22 * rear, r_lo - 62 * rear, r_pw - 40 * rear), par)
+    # near paw: back and up (wind-up), then a fast arc forward and down, claws out
+    up = keyed(t, [(0.0, r_up), (0.2, -40), (0.3, -34), (0.42, -172), (0.56, -140), (0.95, r_up)])
+    lo = keyed(t, [(0.0, r_lo), (0.2, -250), (0.3, -262), (0.42, -178), (0.56, -120), (0.95, r_lo)])
+    pw = keyed(t, [(0.0, r_pw), (0.2, -260), (0.3, -280), (0.42, -160), (0.56, -150), (0.95, r_pw)])
+    aim(P, ["arm_upper.R", "arm_lower.R", "paw_front.R"], (up, lo, pw), par)
+    cum = 0.0
+    for i, b in enumerate(TAIL):                                               # the tail balances: lifts on the rear-up, snaps back on the hit
+        dly = 0.012 * i
+        want = (1.2 + 0.25 * i) * keyed(t - dly, [(0.0, 0), (0.24, 1), (0.42, -1.6), (0.6, 0.6), (0.95, 0)])
+        P[b] = want - cum; cum = want
+    return P
+
+def jump(t):
+    """a full jump in place (the game moves her): crouch, push off, fly up with the paws tucked, level out at the top,
+    fall nose first reaching for the ground, land on the front paws, then the hind ones.
+    Frames (of 36): 0-6 crouch, 6-10 push off, 10-18 rise, 18-22 top, 22-30 fall, 30-35 landing."""
+    P = {}
+    hp = keyed(t, [(0, 0), (0.17, 5), (0.27, -27), (0.45, -30), (0.58, -6), (0.72, 22), (0.84, 12), (0.93, 0)])
+    dz = keyed(t, [(0, 0), (0.17, -0.10), (0.27, 0.05), (0.34, 0), (0.82, 0), (0.89, -0.08), (1, 0)])
+    dy = keyed(t, [(0, 0), (0.17, 0.03), (0.27, -0.04), (0.4, 0), (0.84, 0), (0.9, -0.03), (1, 0)])
+    body = (dy, dz)
+    sp = keyed(t, [(0, 0), (0.17, 8), (0.27, -5), (0.45, -4), (0.58, 9), (0.72, 2), (0.89, 8), (1, 0)])
+    ch = keyed(t, [(0, 0), (0.17, 8), (0.27, -7), (0.45, -5), (0.58, 9), (0.72, 0), (0.89, 6), (1, 0)])
+    P["hips"] = hp; P["hips_loc"] = body; P["spine"] = sp; P["chest"] = ch
+    P["neck"] = -0.3 * hp; P["head"] = -0.35 * hp + keyed(t, [(0, 0), (0.17, 8), (0.3, -6), (0.72, 6), (0.89, 10), (1, 0)])
+    gf = keyed(t, [(0.16, 1), (0.22, 0), (0.8, 0), (0.85, 1)])            # front paws on the ground
+    gh = keyed(t, [(0.25, 1), (0.3, 0), (0.84, 0), (0.9, 1)])             # hind paws on the ground
+    fU = keyed(t, [(0.18, 0), (0.3, 28), (0.5, 28), (0.62, -15), (0.75, -55), (0.85, -35)])
+    fL = keyed(t, [(0.18, 0), (0.3, -95), (0.5, -95), (0.62, -55), (0.75, 8), (0.85, 0)])
+    hT = keyed(t, [(0.25, 20), (0.34, 55), (0.48, 50), (0.6, -30), (0.74, -38), (0.86, -15)])
+    hS = keyed(t, [(0.25, -10), (0.34, -30), (0.48, -25), (0.6, 42), (0.74, 30), (0.86, 5)])
+    hP = keyed(t, [(0.25, 30), (0.34, 70), (0.48, 60), (0.6, 0), (0.86, 0)])
+    H = arm.data.bones["hips"].head_local
+    for s_, o in ((".L", 0.0), (".R", 6.0)):
+        A = shoulder(s_, sp, ch); a = _rot((A[0] - H.y, A[1] - H.z), hp); par = hp + sp + ch
+        (sy, sz), *_ , wrist = _geo("arm_upper" + s_, "arm_lower" + s_)
+        u, l = ik("arm_upper" + s_, "arm_lower" + s_, wrist[0], wrist[1], body, +1, A=(H.y + a[0], H.z + a[1]), parent=par)
+        P["arm_upper" + s_] = gf * u + (1 - gf) * (fU + o); P["arm_lower" + s_] = gf * l + (1 - gf) * (fL - o)
+        P["paw_front" + s_] = gf * -(u + l + par) + (1 - gf) * -20
+        (hy, hz), *_ , ankle = _geo("thigh" + s_, "shin" + s_)
+        T = arm.data.bones["thigh" + s_].head_local; a = _rot((T.y - H.y, T.z - H.z), hp)
+        u, l = ik("thigh" + s_, "shin" + s_, ankle[0], ankle[1], body, -1, A=(H.y + a[0], H.z + a[1]), parent=hp)
+        P["thigh" + s_] = gh * u + (1 - gh) * (hT - o); P["shin" + s_] = gh * l + (1 - gh) * hS
+        P["paw_hind" + s_] = gh * -(u + l + hp) + (1 - gh) * hP
+        P["ear" + s_] = keyed(t, [(0, 0), (0.17, 8), (0.3, -24), (0.55, -10), (0.72, -28), (0.9, 6), (1, 0)])
+    cum = 0.0
+    for i, b in enumerate(TAIL):                                          # the tail trails: down behind her on the way up, up above her on the way down
+        dly = 0.012 * i
+        k = keyed(t - dly, [(0, 0), (0.17, 1.5), (0.3, -3.6), (0.48, -3.0), (0.62, 0.5), (0.76, 3.2), (0.88, 2.0), (1, 0)])
+        want = k * (1 + 0.9 * i) - 0.6 * hp * (1 if i == 0 else 0)
+        P[b] = want - cum; cum = want
+    return P
+
 def tail_flag(t):
     """alarm: stands tense on all fours and whips the tail in sharp series, the way squirrels scold"""
     P = {}
@@ -464,6 +546,7 @@ def sniff(t):
 bake("run", 16, run, True); bake("tail_attack_front", 28, lambda t: tail_attack(t, 1), False); bake("tail_attack_back", 28, lambda t: tail_attack(t, -1), False); bake("climb", 30, climb, True)
 bake("climb_hug", 30, climb_hug, True)["holdout"] = "Trunk"; bake("tail_spin", 28, tail_spin, False)
 bake("sit_alert", 90, sit_alert, True); bake("nibble", 60, nibble, True); bake("tail_flag", 60, tail_flag, True); bake("sniff", 90, sniff, True)
+bake("paw_swipe", 24, paw_swipe, False); bake("jump", 36, jump, False)
 bake("sit_idle", 60, sit_idle, True); bake("curl_up", 40, curl_up, False); bake("sleep_ball", 90, sleep_ball, True)
 bake("tail_flip_side", 22, tail_flip_side, False)["wide"] = 1.25; bake("tail_flip_front", 24, tail_flip_front, False)["wide"] = 1.25
 if "Trunk" not in bpy.data.objects:
