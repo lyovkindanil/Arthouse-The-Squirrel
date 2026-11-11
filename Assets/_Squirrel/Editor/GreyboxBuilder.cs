@@ -258,6 +258,8 @@ namespace SquirrelEditor
             Set(attack, "slash", slash);
             var spiritAnim = body.GetComponentInChildren<SquirrelSpriteAnimator>();
             if (spiritAnim != null) Set(spiritAnim, "attack", attack);
+            var clipAnim = body.GetComponentInChildren<SquirrelClipAnimator>();
+            if (clipAnim != null) { Set(clipAnim, "attack", attack); Set(clipAnim, "health", health); }
 
             var thrower = sq.AddComponent<AcornThrower>();
             Set(thrower, "sprite", white);

@@ -232,5 +232,33 @@ namespace Squirrel.Tests
             Assert.AreEqual(r0 + memory.PushBackAmount, zone.Radius, 0.05f, "Край отступил");
             Assert.AreEqual(memory.PushBackAmount, zone.PushedBack, 0.001f);
         }
+
+        [UnityTest]
+        public IEnumerator Clip_Animator_Follows_Actions()
+        {
+            var anim = squirrel.GetComponentInChildren<SquirrelClipAnimator>();
+            if (anim == null) Assert.Ignore("Сцена собрана без покадровых анимаций белки");
+            yield return WaitSeconds(0.5f);
+            Assert.AreEqual("idle_test", anim.CurrentClip, "стоит");
+
+            input.SetOverride(Vector2.right, false);
+            yield return WaitSeconds(0.3f);
+            Assert.AreEqual("run", anim.CurrentClip, "бежит");
+
+            input.SetOverride(Vector2.zero, true);
+            yield return WaitSeconds(0.15f);
+            Assert.AreEqual("jump", anim.CurrentClip, "в прыжке");
+            input.SetOverride(Vector2.zero, false);
+            yield return WaitSeconds(1.5f);
+            Assert.AreEqual("idle_test", anim.CurrentClip, "приземлилась и снова стоит");
+
+            input.SetOverride(Vector2.zero, false, true);
+            yield return null;
+            yield return null;
+            Assert.AreEqual("paw_swipe", anim.CurrentClip, "удар лапой");
+            input.SetOverride(Vector2.zero, false);
+            yield return WaitSeconds(0.8f);
+            Assert.AreEqual("idle_test", anim.CurrentClip, "удар доигран");
+        }
     }
 }

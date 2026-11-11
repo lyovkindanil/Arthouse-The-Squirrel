@@ -1,0 +1,83 @@
+{
+ "form": "spirit3d",
+ "clips": [
+  {
+   "name": "idle_test",
+   "frames": 60,
+   "cols": 8,
+   "size": 256,
+   "fps": 30.0,
+   "loop": true,
+   "ppu": 107.563,
+   "pivotX": 0.6324,
+   "pivotY": 0.2176,
+   "offsetX": -0.12,
+   "offsetY": 0.0
+  },
+  {
+   "name": "run",
+   "frames": 16,
+   "cols": 8,
+   "size": 256,
+   "fps": 30.0,
+   "loop": true,
+   "ppu": 107.563,
+   "pivotX": 0.6324,
+   "pivotY": 0.2176,
+   "offsetX": -0.12,
+   "offsetY": 0.0
+  },
+  {
+   "name": "jump",
+   "frames": 36,
+   "cols": 8,
+   "size": 256,
+   "fps": 30.0,
+   "loop": false,
+   "ppu": 107.563,
+   "pivotX": 0.6324,
+   "pivotY": 0.2176,
+   "offsetX": -0.12,
+   "offsetY": 0.0
+  },
+  {
+   "name": "climb",
+   "frames": 30,
+   "cols": 8,
+   "size": 256,
+   "fps": 30.0,
+   "loop": true,
+   "ppu": 107.563,
+   "pivotX": 0.6324,
+   "pivotY": 0.4971,
+   "offsetX": 0.38,
+   "offsetY": 0.26
+  },
+  {
+   "name": "paw_swipe",
+   "frames": 24,
+   "cols": 8,
+   "size": 256,
+   "fps": 30.0,
+   "loop": false,
+   "ppu": 107.563,
+   "pivotX": 0.6324,
+   "pivotY": 0.2176,
+   "offsetX": -0.12,
+   "offsetY": 0.0
+  },
+  {
+   "name": "sit_idle",
+   "frames": 60,
+   "cols": 8,
+   "size": 256,
+   "fps": 30.0,
+   "loop": true,
+   "ppu": 107.563,
+   "pivotX": 0.6324,
+   "pivotY": 0.2176,
+   "offsetX": -0.12,
+   "offsetY": 0.0
+  }
+ ]
+}
