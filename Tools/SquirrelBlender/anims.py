@@ -26,8 +26,8 @@ def apply(pose, frame, prev):
         b.rotation_euler = e; prev[b.name] = e.copy()
         b.keyframe_insert("rotation_euler", frame=frame)
     for name, key in (("hips", "hips_loc"), ("root", "root_loc")):
-        b = pb[name]; dy, dz = pose.get(key, (0, 0))
-        b.location = b.bone.matrix_local.to_3x3().inverted() @ Vector((0, dy, dz)); b.keyframe_insert("location", frame=frame)
+        b = pb[name]; v = pose.get(key, (0, 0)); dx, dy, dz = v if len(v) == 3 else (0, v[0], v[1])
+        b.location = b.bone.matrix_local.to_3x3().inverted() @ Vector((dx, dy, dz)); b.keyframe_insert("location", frame=frame)
     s = pose.get("chest_scale", 1.0); pb["chest"].scale = (s, 1, s); pb["chest"].keyframe_insert("scale", frame=frame)
 
 def bake(name, n, fn, loop):
@@ -224,8 +224,65 @@ def tail_spin(t):
         P[b] = Wprev.inverted() @ W; Wprev = W
     return P
 
+# ---------------------------------------------------------------- flips: a jump, one fast turn in the air, the tail hits
+HIT_DIR = (82, 102, 120, 137, 152, 166, 180, 195, 212, 228)    # tail thrown forward in an arc over the back
+HIT = local(HIT_DIR)
+def _flight(t, a=0.16, b=0.72):
+    k = min(1, max(0, (t - a) / (b - a)))
+    return k, sin(pi * k)                                   # progress of the flight, height 0..1
+def tail_flip_side(t):
+    """side flip: she jumps and rolls over her side (about the spine); the tail, thrown forward, whips around with the body"""
+    P = {}
+    def env(a, b, c, d, x): return ease((x - a) / (b - a)) * (1 - ease((x - c) / (d - c)))
+    wind = env(0.0, 0.16, 0.16, 0.3, t); k, up = _flight(t)
+    roll = 360 * ease(k); land = env(0.68, 0.8, 0.8, 1.0, t)
+    h = 0.36                                               # height of the body axis above the paws
+    r = math.radians(roll)
+    P["root"] = Matrix.Rotation(r, 3, 'Y') @ Matrix.Rotation(math.radians(-8 * up), 3, 'X')
+    P["root_loc"] = (-h * sin(r), 0.05 * up, h - h * cos(r) + 0.7 * up)
+    P["hips_loc"] = (0, -0.06 * wind - 0.04 * land)
+    P["hips"] = -6 * wind + 5 * land; P["spine"] = 5 * wind + 4 * up; P["chest"] = 4 * wind + 3 * up
+    P["neck"] = 6 * up; P["head"] = 5 * wind + 8 * up
+    for s_ in (".L", ".R"):
+        P["arm_upper" + s_] = 6 * wind + 25 * up - 8 * land; P["arm_lower" + s_] = 10 * wind + 45 * up
+        P["thigh" + s_] = -10 * wind - 30 * up + 8 * land; P["shin" + s_] = 16 * wind + 50 * up + 8 * land
+        P["ear" + s_] = -22 * up + 5 * wind
+    for i, b in enumerate(TAIL, 1):
+        d = 0.012 * i
+        back = env(0.0, 0.16, 0.16, 0.3, t - d * 0.5)
+        thr = env(0.08, 0.26, 0.66, 0.98, t - d * 0.6)      # tail thrown forward while she rolls
+        over = env(0.6, 0.74, 0.74, 0.98, t - d)
+        P[b] = WIND_T[i - 1] * back + CONE[i - 1] * thr + 2.5 * over
+    return P
+CONE = local((95, 115, 130, 140, 146, 150, 154, 158, 164, 172))   # tail up and forward, almost straight: it sweeps a wide circle as she rolls
+WIND_T = (-9, -4, -3, -2, -2, -1, 0, 0, 0, 0)
+def tail_flip_front(t):
+    """forward flip: she jumps, turns head over heels with the tail tucked, and slams the tail down in front on landing"""
+    P = {}
+    def env(a, b, c, d, x): return ease((x - a) / (b - a)) * (1 - ease((x - c) / (d - c)))
+    wind = env(0.0, 0.16, 0.16, 0.3, t); k, up = _flight(t, 0.16, 0.68)
+    ang = 360 * ease(k); land = env(0.64, 0.76, 0.78, 1.0, t)
+    c = (-0.1, 0.36); rc = _rot(c, ang)                    # turn about the middle of the body, not about the paws
+    P["root"] = ang
+    P["root_loc"] = (c[0] - rc[0] + 0.1 * land, c[1] - rc[1] + 0.55 * up)
+    P["hips_loc"] = (0, -0.06 * wind - 0.05 * land)
+    P["hips"] = -6 * wind + 6 * land; P["spine"] = 5 * wind + 16 * up; P["chest"] = 4 * wind + 14 * up     # ball in the air
+    P["neck"] = 10 * up; P["head"] = 5 * wind + 14 * up - 6 * land
+    for s_ in (".L", ".R"):
+        P["arm_upper" + s_] = 6 * wind + 30 * up - 12 * land; P["arm_lower" + s_] = 10 * wind + 50 * up
+        P["thigh" + s_] = -10 * wind - 40 * up + 10 * land; P["shin" + s_] = 16 * wind + 60 * up + 8 * land
+        P["ear" + s_] = -24 * up + 5 * wind - 10 * land
+    for i, b in enumerate(TAIL, 1):
+        d = 0.012 * i
+        back = env(0.0, 0.16, 0.16, 0.3, t - d * 0.5)
+        tuck = env(0.14, 0.34, 0.5, 0.68, t)               # tail wrapped tight while she turns
+        slam = env(0.5, 0.7, 0.76, 1.0, t - d)             # and thrown over on landing
+        P[b] = WIND_T[i - 1] * back + 8.5 * tuck + HIT[i - 1] * 0.93 * slam
+    return P
+
 bake("run", 16, run, True); bake("tail_attack_front", 28, lambda t: tail_attack(t, 1), False); bake("tail_attack_back", 28, lambda t: tail_attack(t, -1), False); bake("climb", 30, climb, True)
 bake("climb_hug", 30, climb_hug, True)["holdout"] = "Trunk"; bake("tail_spin", 28, tail_spin, False)
+bake("tail_flip_side", 22, tail_flip_side, False)["wide"] = 1.25; bake("tail_flip_front", 24, tail_flip_front, False)["wide"] = 1.25
 if "Trunk" not in bpy.data.objects:
     bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=0.2, depth=5, location=(0, -0.3 - 0.2, 0.2))
     tr = bpy.context.active_object; tr.name = "Trunk"; tr.display_type = 'WIRE'

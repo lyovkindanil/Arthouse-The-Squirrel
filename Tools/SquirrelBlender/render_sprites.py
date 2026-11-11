@@ -14,6 +14,9 @@ scn.render.film_transparent = True; scn.render.resolution_x = scn.render.resolut
 scn.render.image_settings.file_format = "PNG"; scn.render.image_settings.color_mode = "RGBA"
 f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
 loop = bool(act.get("loop", True))
+wide = float(act.get("wide", 1.0))                       # big moves get a bigger frame at the same pixels per unit
+size = int(round(size * wide)); cam.data.ortho_scale *= wide
+scn.render.resolution_x = scn.render.resolution_y = size
 for name in ("Trunk",):                                  # objects that only cut the picture (far legs behind the trunk)
     if name in bpy.data.objects: bpy.data.objects[name].hide_render = act.get("holdout") != name
 frames = list(range(f0, f1 if loop else f1 + 1, step))   # in a loop the last key equals the first one, so it is skipped
