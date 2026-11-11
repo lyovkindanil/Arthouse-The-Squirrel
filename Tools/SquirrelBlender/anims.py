@@ -321,7 +321,7 @@ def mix(a, b, k): return [x + (y - x) * k for x, y in zip(a, b)]
 SIT_TAIL = [d + 6 for d in REST_DIR]
 NO_YAW = [0.0] * 10
 def sit(P, lean=0.0, drop=0.0, head=0.0, head_yaw=0.0, arms=(-104, -138), breath=0.0, tail_add=None,
-        sp=4.0, ch=8.0, nk=22.0, tail=None, yaws=None):
+        sp=4.0, ch=8.0, nk=22.0, tail=None, yaws=None, hb=0.0, sb=0.0, cb=0.0):
     """sitting on the haunches. lean: forward pitch of the body; arms: side-view directions of upper and lower front leg"""
     hp = -58 + lean
     body = (0.04, -0.2 - drop)
@@ -331,9 +331,10 @@ def sit(P, lean=0.0, drop=0.0, head=0.0, head_yaw=0.0, arms=(-104, -138), breath
         T = arm.data.bones["thigh" + s_].head_local; a = _rot((T.y - H.y, T.z - H.z), hp)
         u, l = ik("thigh" + s_, "shin" + s_, ty, -0.765, body, -1, A=(H.y + a[0], H.z + a[1]), parent=hp)
         P["thigh" + s_] = u; P["shin" + s_] = l; P["paw_hind" + s_] = -(u + l + hp)
-        aim(P, ["arm_upper" + s_, "arm_lower" + s_, "paw_front" + s_], (arms[0], arms[1], arms[1] - 25), hp + sp + ch)
+        aim(P, ["arm_upper" + s_, "arm_lower" + s_, "paw_front" + s_], (arms[0], arms[1], arms[1] - 25), hp + hb + sp + sb + ch + cb)
     P["spine"] = sp; P["chest"] = ch; P["chest_scale"] = 1 + 0.03 * breath
-    P["neck"] = (nk, head_yaw * 0.3); P["head"] = (-(hp + sp + ch + nk) + head, head_yaw * 0.7)
+    P["hips.b"] = hb; P["spine.b"] = sb; P["chest.b"] = cb      # the extra back joints, used for curling up
+    P["neck"] = (nk, head_yaw * 0.3); P["head"] = (-(hp + hb + sp + sb + ch + cb + nk) + head, head_yaw * 0.7)
     dirs = list(tail or SIT_TAIL)
     if tail_add: dirs = [d + x for d, x in zip(dirs, tail_add)]
     tail_pose(P, dirs, yaws or NO_YAW, hp)
@@ -380,10 +381,11 @@ def rest_pose(P, c_body, c_head, c_flat, c_wrap, breath=0.0, head=0.0, head_yaw=
     """0 = sitting hunched and calm, 1 = curled into a ball. The back stays arched like a dome, the nose goes down to the belly,
     the tail first lies down behind (c_flat), then sweeps around the body (c_wrap)"""
     arms = mix((-96, -86), (-62, -176), c_body)
-    sit(P, lean=30 - 42 * c_body, drop=0.03 * c_body, head=head * (1 - c_head) + 6 + 144 * c_head, head_yaw=head_yaw * (1 - c_head), arms=arms, breath=breath,
-        sp=10 + 40 * c_body, ch=12 + 48 * c_body, nk=14 + 36 * c_head,
+    # six joints share the curl: the rump stays down, the back makes an even arc over it
+    sit(P, lean=30 - 50 * c_body, drop=0.03 * c_body, head=head * (1 - c_head) + 6 + 100 * c_head, head_yaw=head_yaw * (1 - c_head), arms=arms, breath=breath,
+        hb=30 * c_body, sp=10 + 22 * c_body, sb=32 * c_body, ch=12 + 20 * c_body, cb=30 * c_body, nk=14 + 30 * c_head,
         tail=mix(SIT_TAIL, BALL_TAIL, c_flat), yaws=mix(NO_YAW, BALL_YAW, c_wrap), tail_add=tail_add)
-    for s_ in (".L", ".R"): P["ear" + s_] = -22 * c_head
+    for s_ in (".L", ".R"): P["ear" + s_] = -45 * c_head
     return P
 def sit_idle(t):
     """sits quietly: breathes, looks to the side once, ear twitches, the tail tip sways"""
@@ -404,7 +406,7 @@ def sleep_ball(t):
     br = 0.5 - 0.5 * cos(2 * pi * t)
     rest_pose(P, 1, 1, 1, 1, breath=1.6 * br, tail_add=[0.25 * i * br for i in range(1, 11)])
     P["hips_loc"] = (P["hips_loc"][0], P["hips_loc"][1] + 0.008 * br)
-    P["ear.L"] = -22 + 10 * pulse(t, 0.55, 0.03, 0.06)
+    P["ear.L"] = -45 + 12 * pulse(t, 0.55, 0.03, 0.06)
     return P
 
 def tail_flag(t):
