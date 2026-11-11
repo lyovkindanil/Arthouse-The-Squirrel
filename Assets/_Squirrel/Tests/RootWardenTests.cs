@@ -39,7 +39,7 @@ namespace Squirrel.Tests
             health = squirrel.GetComponent<SquirrelHealth>();
             boss = Object.FindAnyObjectByType<RootWarden>();
             heart = Object.FindAnyObjectByType<Heart>();
-            gate = boss.transform.Find("Boss Gate").gameObject;
+            gate = boss.Gate;
             squirrel.GetComponent<SquirrelInput>().SetOverride(Vector2.zero, false);
             yield return null;
         }
@@ -168,6 +168,67 @@ namespace Squirrel.Tests
             Assert.AreEqual(WardenState.Defeated, boss.State, "сторож не воскрес после загрузки");
             Assert.IsFalse(heart.Locked);
             Assert.IsFalse(gate.activeSelf);
+        }
+
+        [UnityTest]
+        public IEnumerator Warden_Walks_Slowly_Towards_Squirrel_And_Keeps_Distance()
+        {
+            Vector3 gatePos = gate.transform.position;
+            health.GrantInvulnerability(60f); // атаки не мешают смотреть за шагом
+            squirrel.Teleport(ArenaFloor);
+            yield return WaitSeconds(2f); // пробуждение
+            float x0 = boss.transform.position.x;
+            yield return WaitSeconds(1f);
+            float step = boss.transform.position.x - x0;
+            Assert.Greater(step, 0.3f, "идёт к белке");
+            Assert.Less(step, 3f, "идёт не быстро");
+            Assert.AreEqual(1f, boss.Facing, "смотрит на белку");
+            Assert.AreEqual(gatePos, gate.transform.position, "ворота не ходят за сторожем");
+
+            Vector2 near = new Vector2(74.5f, 56.05f); // слева от уступа с Сердцем
+            squirrel.Teleport(near);
+            yield return WaitSeconds(5f);
+            Assert.IsTrue(boss.IsFighting);
+            float gap = near.x - boss.transform.position.x;
+            Assert.Greater(gap, 4f, "не наступает на белку");
+            Assert.Less(gap, 6.5f, "подошёл к белке");
+        }
+
+        [UnityTest]
+        public IEnumerator Burrow_Moves_Warden_To_Other_Side_Of_Squirrel()
+        {
+            Vector2 middle = new Vector2(72.5f, 56.05f);
+            squirrel.Teleport(middle);
+            yield return WaitSeconds(2f);
+            Assert.Less(boss.transform.position.x, middle.x, "сначала слева от белки");
+            float before = health.Current;
+            boss.DebugBurrow();
+            yield return WaitSeconds(0.3f);
+            Assert.IsTrue(boss.IsUnderground);
+            Assert.IsFalse(boss.CanBeHit, "под землёй не достать");
+
+            float end = Time.time + 10f;
+            while (Time.time < end && boss.State != WardenState.Idle) yield return null;
+            Assert.AreEqual(WardenState.Idle, boss.State, "вынырнул и продолжил бой");
+            Assert.Greater(boss.transform.position.x, middle.x + 4f, "вынырнул по другую сторону от белки");
+            Assert.AreEqual(before, health.Current, "холмик прошёл под белкой, не ранив");
+            Assert.IsTrue(boss.CanBeHit);
+        }
+
+        [UnityTest]
+        public IEnumerator Death_While_Underground_Resets_Warden_To_Wall()
+        {
+            Vector3 start = boss.transform.position;
+            squirrel.Teleport(ArenaFloor);
+            yield return WaitSeconds(2f);
+            boss.DebugBurrow();
+            yield return WaitSeconds(1.5f);
+            health.DebugSet(1f, 0);
+            health.Damage(1, squirrel.transform.position);
+            yield return WaitSeconds(0.2f);
+            Assert.AreEqual(WardenState.Dormant, boss.State);
+            Assert.AreEqual(start.x, boss.transform.position.x, 0.01f, "вернулся к стене");
+            Assert.IsFalse(boss.IsUnderground);
         }
     }
 }
