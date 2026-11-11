@@ -1,10 +1,10 @@
 import bpy, math, sys, time
 from mathutils import Vector
-D="/mnt/user-data/uploads/ClaudeProjects/Arthouse-The-Squirrel/Assets/_Squirrel/Meshy_AI_Moonlit_Wisptail_20261111_texture_fbx/Meshy_AI_Moonlit_Wisptail_20261111_texture_fbx/"
+FBX=sys.argv[-2]   # usage: python rig.py <model.fbx> <out_dir>
 OUT=sys.argv[-1]
 t0=time.time()
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.fbx(filepath=D+"Meshy_AI_Moonlit_Wisptail_20261111_texture.fbx")
+bpy.ops.import_scene.fbx(filepath=FBX)
 body=[x for x in bpy.context.scene.objects if x.type=="MESH"][0]; body.name="Squirrel"
 # --- armature ---
 arm_data=bpy.data.armatures.new("SquirrelRig"); arm=bpy.data.objects.new("SquirrelRig",arm_data)
