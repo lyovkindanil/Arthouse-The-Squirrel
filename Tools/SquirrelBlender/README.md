@@ -1,0 +1,14 @@
+# Белка: 3D-модель → спрайты
+
+Пайплайн: модель Meshy (FBX) → риг в Blender → анимации (Action) → рендер в прозрачные PNG-кадры → покадровая анимация в Unity.
+
+- `rig.py <fbx> <out_dir>` — импортирует FBX, ставит скелет `SquirrelRig` (30 костей: root, hips, spine, chest, neck, head, уши, четыре лапы по 3 кости, хвост `tail.01`…`tail.10`), считает веса, сохраняет `squirrel_rig.blend`.
+- `setup_anim.py <in.blend> <out.blend>` — добавляет камеру `SpriteCam` (ортографическая, вид сбоку, белка смотрит вправо), свет, настройки рендера и пробный Action `idle_test` (дыхание и покачивание хвоста, 48 кадров, цикл).
+- `render_sprites.py` — рендерит Action в кадры и пишет `meta.json` (fps, пикселей на единицу, pivot под лапами):
+
+```
+blender -b squirrel_rig.blend -P render_sprites.py -- <action> <out_dir> [size=512] [step=2] [samples=24]
+```
+
+Камеру `SpriteCam` между анимациями не двигать: тогда масштаб и pivot у всех клипов совпадают.
+Исходники модели и `.blend` в репозиторий не кладём (десятки мегабайт).
