@@ -280,8 +280,133 @@ def tail_flip_front(t):
         P[b] = WIND_T[i - 1] * back + 8.5 * tuck + HIT[i - 1] * 0.93 * slam
     return P
 
+# ================================================================ real squirrel behaviour
+# Squirrels move in quick jerks and then freeze, so most tracks here are "snap and hold".
+def track(t, keys, w=0.035):
+    """keys: [(time 0..1, value)], held until the next key; the change itself takes w of the cycle. Loops."""
+    keys = sorted(keys); t %= 1.0
+    cur = keys[-1][1]
+    for i, (kt, kv) in enumerate(keys):
+        if t >= kt: cur = kv; nxt_t, nxt_v = (keys[i + 1] if i + 1 < len(keys) else (keys[0][0] + 1.0, keys[0][1]))
+    if t < keys[0][0]: nxt_t, nxt_v = keys[0]
+    k = (t - (nxt_t - w)) / w
+    return cur + (nxt_v - cur) * ease(k) if k > 0 else cur
+def pulse(t, at, rise=0.02, fall=0.08):
+    """a quick twitch at time `at`: up fast, down slower"""
+    x = (t - at) % 1.0
+    if x < rise: return ease(x / rise)
+    if x < rise + fall: return 1 - ease((x - rise) / fall)
+    return 0.0
+def _psi(bone):
+    b = arm.data.bones[bone]; return _m.degrees(_m.atan2(b.tail_local.z - b.head_local.z, b.tail_local.y - b.head_local.y))
+def aim(P, chain, dirs, parent):
+    """point the bones of a chain in the given side-view directions (deg: 0 = back, 90 = up, 180 = forward, -90 = down)"""
+    cum = parent
+    for b, d in zip(chain, dirs):
+        want = (d - _psi(b) + 180) % 360 - 180
+        P[b] = (want - cum + 180) % 360 - 180; cum = want
+def tail_dirs(P, dirs, parent, add=None):
+    cum = parent
+    for i, b in enumerate(TAIL):
+        want = dirs[i] - REST_DIR[i]
+        P[b] = want - cum + (add[i] if add else 0); cum = want
+SIT_TAIL = (52, 74, 92, 103, 107, 102, 92, 78, 62, 46)       # up along the back, tip curls away: the classic S
+def sit(P, lean=0.0, drop=0.0, head=0.0, head_yaw=0.0, arms=(-104, -138), breath=0.0, tail_add=None):
+    """sitting upright on the haunches. lean: extra forward pitch of the body; arms: side-view directions of upper and lower front leg"""
+    hp = -58 + lean
+    body = (0.04, -0.2 - drop)
+    P["hips"] = hp; P["hips_loc"] = body
+    H = arm.data.bones["hips"].head_local
+    for s_, ty in ((".L", -0.10), (".R", -0.04)):
+        T = arm.data.bones["thigh" + s_].head_local; a = _rot((T.y - H.y, T.z - H.z), hp)
+        u, l = ik("thigh" + s_, "shin" + s_, ty, -0.765, body, -1, A=(H.y + a[0], H.z + a[1]), parent=hp)
+        P["thigh" + s_] = u; P["shin" + s_] = l; P["paw_hind" + s_] = -(u + l + hp)
+        aim(P, ["arm_upper" + s_, "arm_lower" + s_, "paw_front" + s_], (arms[0], arms[1], arms[1] - 25), hp + 12)
+    P["spine"] = 4; P["chest"] = 8; P["chest_scale"] = 1 + 0.03 * breath
+    P["neck"] = (22, head_yaw * 0.3); P["head"] = (-(hp + 34) + head, head_yaw * 0.7)
+    tail_dirs(P, SIT_TAIL, hp, tail_add)
+    return P
+
+def sit_alert(t):
+    """stands up like a post and looks around: quick turns of the head, freezes, ear and tail twitches"""
+    P = {}
+    yaw = track(t, [(0.0, 0), (0.12, -38), (0.34, -38), (0.38, 12), (0.58, 12), (0.62, -20), (0.8, -20), (0.86, 0)])
+    pitch = track(t, [(0.0, 0), (0.12, -6), (0.38, 4), (0.62, -14), (0.8, -14), (0.86, 0)])
+    lean = track(t, [(0.0, 0), (0.6, -7), (0.82, -7), (0.9, 0)], w=0.06)                 # stretches up to look further
+    fl = pulse(t, 0.22, 0.03, 0.1) + pulse(t, 0.3, 0.03, 0.1) + pulse(t, 0.7, 0.03, 0.12)   # tail flicks
+    add = [(-0.45 * i) * fl for i in range(1, 11)]
+    sit(P, lean=lean, head=pitch, head_yaw=yaw, breath=0.5 - 0.5 * cos(4 * pi * t), tail_add=add)
+    P["ear.L"] = 14 * pulse(t, 0.16) + 12 * pulse(t, 0.5) - 10 * pulse(t, 0.66)
+    P["ear.R"] = 12 * pulse(t, 0.44) + 14 * pulse(t, 0.74) - 8 * pulse(t, 0.2)
+    return P
+
+def nibble(t):
+    """sits and gnaws a nut held in the front paws; stops for a moment to look up"""
+    P = {}
+    busy = 1 - track(t, [(0.0, 0), (0.62, 1), (0.8, 0)], w=0.05)                      # 1 = gnawing, 0 = pause, head up
+    chew = sin(2 * pi * t * 10) * busy                                                # ten bites per cycle
+    turn = sin(2 * pi * t * 2.5) * busy                                               # turns the nut in the paws
+    yaw = track(t, [(0.0, 0), (0.66, -30), (0.78, -30), (0.82, 0)])
+    sit(P, lean=10 * busy + 2, head=14 * busy + 2.5 * chew - 6 * (1 - busy), head_yaw=yaw,
+        arms=(-150 + 4 * turn, 128 + 5 * chew + 6 * turn), breath=0.5 - 0.5 * cos(4 * pi * t),
+        tail_add=[0.5 * sin(2 * pi * t - 0.4 * i) for i in range(1, 11)])
+    P["ear.L"] = 5 * chew + 14 * pulse(t, 0.64); P["ear.R"] = 5 * chew + 12 * pulse(t, 0.7)
+    return P
+
+def tail_flag(t):
+    """alarm: stands tense on all fours and whips the tail in sharp series, the way squirrels scold"""
+    P = {}
+    flicks = [0.08, 0.18, 0.28, 0.55, 0.65]
+    f = sum(pulse(t, a, 0.025, 0.07) for a in flicks)
+    jerk = sum(pulse(t, a, 0.02, 0.05) for a in flicks)                               # the whole body twitches with each flick
+    tense = track(t, [(0.0, 1), (0.42, 0.6), (0.5, 1), (0.8, 0.5), (0.92, 1)], w=0.06)
+    body = (0.0, -0.05 * tense - 0.012 * jerk)
+    P["hips_loc"] = body
+    sp, ch = -3 * tense, -5 * tense - 2 * jerk
+    P["spine"] = sp; P["chest"] = ch
+    P["neck"] = -8 * tense; P["head"] = (6 * tense + 3 * jerk, track(t, [(0.0, 0), (0.4, -25), (0.5, 0), (0.78, -15), (0.9, 0)]))
+    for s_ in (".L", ".R"):
+        (sy, sz), *_ , wrist = _geo("arm_upper" + s_, "arm_lower" + s_)
+        u, l = ik("arm_upper" + s_, "arm_lower" + s_, wrist[0] - 0.03, wrist[1], body, +1, A=shoulder(s_, sp, ch), parent=sp + ch)
+        P["arm_upper" + s_] = u; P["arm_lower" + s_] = l; P["paw_front" + s_] = -(u + l + sp + ch)
+        (hy, hz), *_ , ankle = _geo("thigh" + s_, "shin" + s_)
+        u, l = ik("thigh" + s_, "shin" + s_, ankle[0], ankle[1], body, -1)
+        P["thigh" + s_] = u; P["shin" + s_] = l; P["paw_hind" + s_] = -(u + l)
+        P["ear" + s_] = -10 * tense + 10 * jerk
+    for i, b in enumerate(TAIL, 1):
+        d = 0.006 * i
+        fi = sum(pulse(t - d, a, 0.025, 0.07) for a in flicks)
+        P[b] = (2.0 if i < 4 else 0.5) * tense + (9 - 0.5 * i) * fi + 1.2 * sin(2 * pi * 3 * t - 0.5 * i) * (1 - min(1, fi))
+    return P
+
+def sniff(t):
+    """nose to the ground: lowers the front, sniffs along the ground in little jerks, lifts the head to check around"""
+    P = {}
+    down = track(t, [(0.0, 0), (0.1, 1), (0.62, 1), (0.72, 0)], w=0.09)
+    sn = sin(2 * pi * t * 12) * down                                                  # quick sniffing
+    reach = track(t, [(0.1, 0), (0.28, 1), (0.46, -0.6), (0.62, 0)], w=0.07) * down  # works the nose forward and back
+    look = track(t, [(0.0, 0), (0.76, -32), (0.9, -32), (0.95, 0)])
+    body = (-0.03 * down - 0.03 * reach, -0.05 * down)
+    P["hips_loc"] = body
+    sp, ch = 8 * down, 17 * down
+    P["spine"] = sp; P["chest"] = ch; P["hips"] = -3 * down
+    P["neck"] = (36 * down + 5 * reach, 0); P["head"] = (20 * down - 8 * reach + 2 * sn - 5 * (1 - down), look)
+    for s_ in (".L", ".R"):
+        (sy, sz), *_ , wrist = _geo("arm_upper" + s_, "arm_lower" + s_)
+        u, l = ik("arm_upper" + s_, "arm_lower" + s_, wrist[0], wrist[1], body, +1, A=shoulder(s_, sp - 3 * down, ch), parent=sp + ch - 3 * down)
+        P["arm_upper" + s_] = u; P["arm_lower" + s_] = l; P["paw_front" + s_] = -(u + l + sp + ch - 3 * down)
+        (hy, hz), *_ , ankle = _geo("thigh" + s_, "shin" + s_)
+        H = arm.data.bones["hips"].head_local; T = arm.data.bones["thigh" + s_].head_local; a = _rot((T.y - H.y, T.z - H.z), -3 * down)
+        u, l = ik("thigh" + s_, "shin" + s_, ankle[0], ankle[1], body, -1, A=(H.y + a[0], H.z + a[1]), parent=-3 * down)
+        P["thigh" + s_] = u; P["shin" + s_] = l; P["paw_hind" + s_] = -(u + l - 3 * down)
+    P["ear.L"] = -8 * down + 3 * sn + 14 * pulse(t, 0.8); P["ear.R"] = -8 * down - 3 * sn + 12 * pulse(t, 0.86)
+    for i, b in enumerate(TAIL, 1):
+        P[b] = 1.5 * down + (1.0 + 0.2 * i) * sin(2 * pi * 2 * t - 0.5 * i) + (3 - 0.2 * i) * pulse(t - 0.006 * i, 0.82, 0.03, 0.1)
+    return P
+
 bake("run", 16, run, True); bake("tail_attack_front", 28, lambda t: tail_attack(t, 1), False); bake("tail_attack_back", 28, lambda t: tail_attack(t, -1), False); bake("climb", 30, climb, True)
 bake("climb_hug", 30, climb_hug, True)["holdout"] = "Trunk"; bake("tail_spin", 28, tail_spin, False)
+bake("sit_alert", 90, sit_alert, True); bake("nibble", 60, nibble, True); bake("tail_flag", 60, tail_flag, True); bake("sniff", 90, sniff, True)
 bake("tail_flip_side", 22, tail_flip_side, False)["wide"] = 1.25; bake("tail_flip_front", 24, tail_flip_front, False)["wide"] = 1.25
 if "Trunk" not in bpy.data.objects:
     bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=0.2, depth=5, location=(0, -0.3 - 0.2, 0.2))
