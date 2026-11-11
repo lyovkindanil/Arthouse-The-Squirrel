@@ -556,7 +556,11 @@ if "Trunk" not in bpy.data.objects:
     o = nt.nodes.new("ShaderNodeOutputMaterial"); h = nt.nodes.new("ShaderNodeHoldout"); nt.links.new(h.outputs[0], o.inputs[0])
     tr.data.materials.append(m); tr.hide_render = True
 for name in ("run", "jump", "paw_swipe", "tail_flag", "tail_attack_front", "tail_attack_back", "tail_spin", "tail_flip_side", "tail_flip_front"):
-    bpy.data.actions[name]["fur"] = 2.0                 # strands stir twice as strong in fast actions (read by render_sprites.py)
+    bpy.data.actions[name]["fur"] = 1.5                 # strands stir stronger in fast actions (read by render_sprites.py)
+# how the game carries her while the clip plays in place: the strands lag against this motion (read by render_sprites.py)
+bpy.data.actions["run"]["virt_vel"] = (0.0, -3.5, 0.0)
+bpy.data.actions["climb"]["virt_vel"] = (0.0, 0.0, 1.0); bpy.data.actions["climb_hug"]["virt_vel"] = (0.0, 0.0, 1.0)
+bpy.data.actions["jump"]["virt_z"] = [1.3 * math.sin(math.pi * min(1, max(0, (i - 9) / 21))) for i in range(36)]
 arm.animation_data.action = bpy.data.actions["idle_test"]
 for b in pb: b.location = (0, 0, 0); b.rotation_euler = (0, 0, 0); b.scale = (1, 1, 1)
 scn.frame_set(1)
